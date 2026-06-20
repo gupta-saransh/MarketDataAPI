@@ -52,6 +52,9 @@ async function createSqliteAdapter() {
 async function createPostgresAdapter() {
   const { default: pg } = await import('pg')
 
+  // Return DATE columns as 'YYYY-MM-DD' strings instead of JS Date objects.
+  pg.types.setTypeParser(1082, val => val)
+
   const pool = new pg.Pool({
     connectionString: process.env.DATABASE_URL,
     // Supabase requires SSL; the pooled connection cert is fine to accept.

@@ -8,7 +8,7 @@
 export const openapi = {
   openapi: '3.1.0',
   info: {
-    title: 'MFAPI — India Mutual Fund Data API',
+    title: 'Market Data API',
     version: '1.0.0',
     description:
       'Free, public REST API for Indian mutual fund schemes and their NAV history. '

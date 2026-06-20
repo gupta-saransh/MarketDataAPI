@@ -35,8 +35,8 @@ CREATE TABLE IF NOT EXISTS schemes (
 
 CREATE TABLE IF NOT EXISTS nav_history (
     scheme_code  integer NOT NULL REFERENCES schemes(scheme_code) ON DELETE CASCADE,
-    nav_date     text    NOT NULL,   -- stored as YYYY-MM-DD
-    nav          double precision NOT NULL,
+    nav_date     date    NOT NULL,
+    nav          real    NOT NULL,
     PRIMARY KEY (scheme_code, nav_date)
 );
 
