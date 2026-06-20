@@ -58,8 +58,8 @@ const NAV = `
   FROM nav_history n
   JOIN schemes s ON s.scheme_code = n.scheme_code
   WHERE n.scheme_code = ?
-    AND (? IS NULL OR n.nav_date >= ?)
-    AND (? IS NULL OR n.nav_date <= ?)
+    AND (CAST(? AS TEXT) IS NULL OR n.nav_date >= ?)
+    AND (CAST(? AS TEXT) IS NULL OR n.nav_date <= ?)
   ORDER BY n.nav_date DESC
 `
 
