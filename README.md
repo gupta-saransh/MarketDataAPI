@@ -1,6 +1,6 @@
-# MFAPI — India Mutual Fund Data API
+# Market Data API — A public free open source Market Data API
 
-A free, public REST API for Indian mutual fund schemes and their NAV (Net Asset Value) history. No authentication required.
+A free, public REST API which currently serves Indian mutual fund schemes and their NAV (Net Asset Value) history. No authentication required.
 
 - **~9,183 active schemes** across all AMCs
 - **2 years of NAV history** per scheme
