@@ -1,0 +1,19 @@
+{
+  "name": "mf-data-api",
+  "version": "1.0.0",
+  "type": "module",
+  "engines": { "node": ">=18" },
+  "scripts": {
+    "dev": "node --experimental-sqlite --watch server.js",
+    "start": "node --experimental-sqlite server.js",
+    "seed": "node --experimental-sqlite pipeline/seed.js",
+    "seed:force": "node --experimental-sqlite pipeline/seed.js --force",
+    "migrate": "node --experimental-sqlite pipeline/migrate-to-supabase.js"
+  },
+  "dependencies": {
+    "@fastify/cors": "^9.0.1",
+    "dotenv": "^16.4.5",
+    "fastify": "^4.28.0",
+    "pg": "^8.13.0"
+  }
+}

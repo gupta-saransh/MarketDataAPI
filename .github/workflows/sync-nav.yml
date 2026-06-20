@@ -1,0 +1,27 @@
+name: Sync NAV from AMFI
+
+# IST = UTC+5:30
+# 10:00 AM IST = 04:30 UTC
+#  4:00 PM IST = 10:30 UTC
+#  7:00 PM IST = 13:30 UTC
+# 10:00 PM IST = 16:30 UTC
+# 11:30 PM IST = 18:00 UTC
+
+on:
+  schedule:
+    - cron: '30 4  * * *'
+    - cron: '30 10 * * *'
+    - cron: '30 13 * * *'
+    - cron: '30 16 * * *'
+    - cron: '0  18 * * *'
+  workflow_dispatch:
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call /api/sync-nav
+        run: |
+          curl -sf -X POST \
+            -H "Authorization: Bearer ${{ secrets.SYNC_NAV_SECRET }}" \
+            "${{ secrets.VERCEL_APP_URL }}/api/sync-nav" | jq .

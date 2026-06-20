@@ -1,0 +1,31 @@
+# Database (large, generated locally by npm run seed)
+api/mfapi.db
+api/*.db
+
+# Dependencies
+node_modules/
+api/node_modules/
+frontend/node_modules/
+
+# Frontend build output
+frontend/dist/
+frontend/dist-ssr/
+
+# Environment files (contain secrets)
+.env
+api/.env
+frontend/.env
+
+# Vercel
+.vercel/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# Legacy / archives
+OLD_CODE.zip
