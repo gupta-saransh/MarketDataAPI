@@ -1,0 +1,50 @@
+{
+  "functions": [
+    {
+      "id": "NAV",
+      "name": "NAV",
+      "description": "Returns the latest NAV value for a mutual fund scheme.",
+      "parameters": [
+        { "name": "code", "description": "Scheme code (e.g. 101762)", "type": "number", "dimensionality": "scalar" }
+      ],
+      "result": { "type": "number", "dimensionality": "scalar" }
+    },
+    {
+      "id": "NAV_DATE",
+      "name": "NAV_DATE",
+      "description": "Returns the date of the latest NAV as DD-MM-YYYY.",
+      "parameters": [
+        { "name": "code", "description": "Scheme code", "type": "number", "dimensionality": "scalar" }
+      ],
+      "result": { "type": "string", "dimensionality": "scalar" }
+    },
+    {
+      "id": "NAV_ON",
+      "name": "NAV_ON",
+      "description": "Returns the NAV for a scheme on a specific date.",
+      "parameters": [
+        { "name": "code", "description": "Scheme code", "type": "number", "dimensionality": "scalar" },
+        { "name": "date", "description": "Date in DD-MM-YYYY format, or a date-formatted cell", "type": "any", "dimensionality": "scalar" }
+      ],
+      "result": { "type": "number", "dimensionality": "scalar" }
+    },
+    {
+      "id": "NAME",
+      "name": "NAME",
+      "description": "Returns the scheme name for a given scheme code.",
+      "parameters": [
+        { "name": "code", "description": "Scheme code", "type": "number", "dimensionality": "scalar" }
+      ],
+      "result": { "type": "string", "dimensionality": "scalar" }
+    },
+    {
+      "id": "FUND_HOUSE",
+      "name": "FUND_HOUSE",
+      "description": "Returns the fund house (AMC) name for a given scheme code.",
+      "parameters": [
+        { "name": "code", "description": "Scheme code", "type": "number", "dimensionality": "scalar" }
+      ],
+      "result": { "type": "string", "dimensionality": "scalar" }
+    }
+  ]
+}
