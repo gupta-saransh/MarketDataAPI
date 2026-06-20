@@ -37,10 +37,25 @@ export async function build(opts = {}) {
 
   // Analytics — fire-and-forget ingest to Axiom (no log drain needed).
   // Skips if AXIOM_TOKEN / AXIOM_DATASET are unset (safe in local dev).
+  const ENDPOINT_TYPE = {
+    '/schemes/:code/nav/latest': 'nav_latest',
+    '/schemes/:code/nav':        'nav_history',
+    '/schemes/isin/:isin':       'isin_lookup',
+    '/schemes/:code':            'scheme_detail',
+    '/schemes/':                 'search',
+    '/schemes':                  'search',
+    '/fund-houses/':             'fund_houses',
+    '/fund-houses':              'fund_houses',
+    '/categories/':              'categories',
+    '/categories':               'categories',
+    '/sync-nav':                 'sync',
+  }
+
   app.addHook('onResponse', (req, reply, done) => {
     if (req.url === '/health' || req.url.startsWith('/openapi.json')) return done()
 
     if (process.env.AXIOM_TOKEN && process.env.AXIOM_DATASET) {
+      const route       = req.routeOptions?.url ?? req.url
       const schemeMatch = req.url.match(/\/schemes\/(\d+)/)
       const isinMatch   = req.url.match(/\/schemes\/isin\/([A-Z0-9]+)/i)
 
@@ -51,14 +66,25 @@ export async function build(opts = {}) {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify([{
-          _time:       new Date().toISOString(),
-          method:      req.method,
-          route:       req.routeOptions?.url ?? req.url,
-          status:      reply.statusCode,
-          ms:          Math.round(reply.elapsedTime),
-          scheme_code: schemeMatch?.[1] ?? undefined,
-          isin:        isinMatch?.[1]   ?? undefined,
-          q:           req.query?.q     ?? undefined,
+          _time:          new Date().toISOString(),
+          method:         req.method,
+          route,
+          endpoint_type:  ENDPOINT_TYPE[route] ?? 'other',
+          status:         reply.statusCode,
+          ms:             Math.round(reply.elapsedTime),
+          scheme_code:    schemeMatch?.[1]                        ?? undefined,
+          isin:           isinMatch?.[1]                          ?? undefined,
+          q:              req.query?.q                            ?? undefined,
+          fund_house_id:  req.query?.fund_house_id                ?? undefined,
+          category_id:    req.query?.category_id                  ?? undefined,
+          broad_category: req.query?.broad_category               ?? undefined,
+          start_date:     req.query?.startDate                    ?? undefined,
+          end_date:       req.query?.endDate                      ?? undefined,
+          ip:             req.headers['x-forwarded-for'] ?? req.ip,
+          country:        req.headers['x-vercel-ip-country']      ?? undefined,
+          city:           req.headers['x-vercel-ip-city']         ?? undefined,
+          ua:             req.headers['user-agent']               ?? undefined,
+          referer:        req.headers['referer']                  ?? undefined,
         }]),
       }).catch(() => {})
     }
