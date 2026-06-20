@@ -13,10 +13,10 @@ const LIST = `
   LEFT JOIN fund_houses       f ON f.id = s.fund_house_id
   LEFT JOIN scheme_categories c ON c.id = s.scheme_category_id
   WHERE
-    (? IS NULL OR LOWER(s.scheme_name) LIKE LOWER(?))
-    AND (? IS NULL OR s.fund_house_id      = ?)
-    AND (? IS NULL OR s.scheme_category_id = ?)
-    AND (? IS NULL OR c.broad_category     = ?)
+    (CAST(? AS TEXT)    IS NULL OR LOWER(s.scheme_name) LIKE LOWER(?))
+    AND (CAST(? AS INTEGER) IS NULL OR s.fund_house_id      = ?)
+    AND (CAST(? AS INTEGER) IS NULL OR s.scheme_category_id = ?)
+    AND (CAST(? AS TEXT)    IS NULL OR c.broad_category     = ?)
   ORDER BY s.scheme_name
   LIMIT ? OFFSET ?
 `
@@ -26,10 +26,10 @@ const LIST_COUNT = `
   FROM schemes s
   LEFT JOIN scheme_categories c ON c.id = s.scheme_category_id
   WHERE
-    (? IS NULL OR LOWER(s.scheme_name) LIKE LOWER(?))
-    AND (? IS NULL OR s.fund_house_id      = ?)
-    AND (? IS NULL OR s.scheme_category_id = ?)
-    AND (? IS NULL OR c.broad_category     = ?)
+    (CAST(? AS TEXT)    IS NULL OR LOWER(s.scheme_name) LIKE LOWER(?))
+    AND (CAST(? AS INTEGER) IS NULL OR s.fund_house_id      = ?)
+    AND (CAST(? AS INTEGER) IS NULL OR s.scheme_category_id = ?)
+    AND (CAST(? AS TEXT)    IS NULL OR c.broad_category     = ?)
 `
 
 const SCHEME_DETAIL = `
