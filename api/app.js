@@ -35,5 +35,36 @@ export async function build(opts = {}) {
   // Machine-readable spec — the frontend explorer renders this.
   app.get('/openapi.json', async () => openapi)
 
+  // Analytics — fire-and-forget ingest to Axiom (no log drain needed).
+  // Skips if AXIOM_TOKEN / AXIOM_DATASET are unset (safe in local dev).
+  app.addHook('onResponse', (req, reply, done) => {
+    if (req.url === '/health' || req.url.startsWith('/openapi.json')) return done()
+
+    if (process.env.AXIOM_TOKEN && process.env.AXIOM_DATASET) {
+      const schemeMatch = req.url.match(/\/schemes\/(\d+)/)
+      const isinMatch   = req.url.match(/\/schemes\/isin\/([A-Z0-9]+)/i)
+
+      fetch(`https://api.axiom.co/v1/datasets/${process.env.AXIOM_DATASET}/ingest`, {
+        method: 'POST',
+        headers: {
+          Authorization:  `Bearer ${process.env.AXIOM_TOKEN}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify([{
+          _time:       new Date().toISOString(),
+          method:      req.method,
+          route:       req.routeOptions?.url ?? req.url,
+          status:      reply.statusCode,
+          ms:          Math.round(reply.elapsedTime),
+          scheme_code: schemeMatch?.[1] ?? undefined,
+          isin:        isinMatch?.[1]   ?? undefined,
+          q:           req.query?.q     ?? undefined,
+        }]),
+      }).catch(() => {})
+    }
+
+    done()
+  })
+
   return app
 }
