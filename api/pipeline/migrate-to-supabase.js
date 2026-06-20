@@ -30,7 +30,7 @@ const sqlitePath = process.env.DB_PATH ?? join(ROOT, 'mfapi.db')
 const lite = new DatabaseSync(sqlitePath)
 const pool = new pg.Pool({ connectionString: DB_URL, ssl: { rejectUnauthorized: false } })
 
-const BATCH = 1000
+const BATCH = 5000
 
 /** Bulk-insert rows into `table` (cols) using a single multi-row INSERT per batch. */
 async function copyTable(table, cols, rows, conflictCols) {
