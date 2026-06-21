@@ -18,6 +18,7 @@ import { openapi } from './openapi.js'
 import fundHousesRoutes from './routes/fund-houses.js'
 import categoriesRoutes from './routes/categories.js'
 import schemesRoutes    from './routes/schemes.js'
+import analyticsRoutes  from './routes/analytics.js'
 import syncRoutes       from './routes/sync.js'
 
 export async function build(opts = {}) {
@@ -50,6 +51,7 @@ export async function build(opts = {}) {
   await app.register(fundHousesRoutes, { prefix: '/fund-houses' })
   await app.register(categoriesRoutes, { prefix: '/categories' })
   await app.register(schemesRoutes,    { prefix: '/schemes' })
+  await app.register(analyticsRoutes,  { prefix: '/schemes' })
   await app.register(syncRoutes)
 
   app.get('/health', async () => ({ status: 'ok', driver: sql.driver }))
@@ -62,6 +64,10 @@ export async function build(opts = {}) {
   const ENDPOINT_TYPE = {
     '/schemes/:code/nav/latest': 'nav_latest',
     '/schemes/:code/nav':        'nav_history',
+    '/schemes/:code/returns':    'returns',
+    '/schemes/:code/rolling':    'rolling',
+    '/schemes/:code/risk':       'risk',
+    '/schemes/:code/sip':        'sip',
     '/schemes/isin/:isin':       'isin_lookup',
     '/schemes/:code':            'scheme_detail',
     '/schemes/':                 'search',

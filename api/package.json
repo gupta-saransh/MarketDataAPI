@@ -11,6 +11,8 @@
     "seed": "node --experimental-sqlite pipeline/seed.js",
     "seed:force": "node --experimental-sqlite pipeline/seed.js --force",
     "migrate": "node --experimental-sqlite pipeline/migrate-to-supabase.js",
+    "migrate:cockroach": "node --experimental-sqlite pipeline/migrate-to-cockroach.js",
+    "prune": "node --experimental-sqlite pipeline/prune.js",
     "test": "node --experimental-sqlite --test"
   },
   "dependencies": {
