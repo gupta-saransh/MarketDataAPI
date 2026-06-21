@@ -1,14 +1,17 @@
 name: Archive NAV data
 
-# Runs once daily at 11:30 PM IST (18:00 UTC).
-# Downloads NAVAll.txt from AMFI and commits it to nav-archive/YYYY-MM-DD.txt.
+# Runs Mon–Sat at 11:30 PM IST (18:00 UTC) — skips Sundays (no NAV updates).
+# Downloads NAVAll.txt, strips schemes whose last NAV predates 2024
+# (cuts the file ~35%), and commits the slimmed file to nav-archive/DD-MM-YYYY.txt.
 # Purpose: disaster-recovery — the full DB can be rebuilt from these files.
 
 # IST = UTC+5:30  →  11:30 PM IST = 18:00 UTC
+# Day-of-week 1-6 = Mon–Sat (0 = Sunday, excluded). At 18:00 UTC the IST and
+# UTC weekday match, so this skips the Sunday-night IST run.
 
 on:
   schedule:
-    - cron: '0 18 * * *'
+    - cron: '0 18 * * 1-6'
   workflow_dispatch:
 
 jobs:
@@ -20,11 +23,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Download NAVAll.txt
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Download & filter NAVAll.txt
         run: |
           mkdir -p nav-archive
           DATE=$(date -u '+%d-%m-%Y')
-          curl -sf "https://portal.amfiindia.com/spages/NAVAll.txt" -o "nav-archive/${DATE}.txt"
+          curl -sf "https://portal.amfiindia.com/spages/NAVAll.txt" -o /tmp/NAVAll.txt
+          node scripts/filter-nav.mjs /tmp/NAVAll.txt "nav-archive/${DATE}.txt"
 
       - name: Commit
         run: |
