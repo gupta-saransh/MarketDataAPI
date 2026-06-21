@@ -1,0 +1,2 @@
+# Archived NAV snapshots are gzipped — treat as binary (no diffing / EOL munging).
+nav-archive/*.gz binary

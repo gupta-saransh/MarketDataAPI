@@ -1,9 +1,10 @@
 name: Archive NAV data
 
 # Runs Mon–Sat at 11:30 PM IST (18:00 UTC) — skips Sundays (no NAV updates).
-# Downloads NAVAll.txt, strips schemes whose last NAV predates 2024
-# (cuts the file ~35%), and commits the slimmed file to nav-archive/DD-MM-YYYY.txt.
+# Downloads NAVAll.txt, strips schemes whose last NAV predates 2024, gzips it,
+# and commits nav-archive/DD-MM-YYYY.txt.gz (~1.6 MB raw -> ~0.2 MB).
 # Purpose: disaster-recovery — the full DB can be rebuilt from these files.
+# To read them again:  gunzip nav-archive/*.gz   (see nav-archive/README.md)
 
 # IST = UTC+5:30  →  11:30 PM IST = 18:00 UTC
 # Day-of-week 1-6 = Mon–Sat (0 = Sunday, excluded). At 18:00 UTC the IST and
@@ -27,12 +28,13 @@ jobs:
         with:
           node-version: 22
 
-      - name: Download & filter NAVAll.txt
+      - name: Download, filter & gzip NAVAll.txt
         run: |
           mkdir -p nav-archive
           DATE=$(date -u '+%d-%m-%Y')
           curl -sf "https://portal.amfiindia.com/spages/NAVAll.txt" -o /tmp/NAVAll.txt
-          node scripts/filter-nav.mjs /tmp/NAVAll.txt "nav-archive/${DATE}.txt"
+          node scripts/filter-nav.mjs /tmp/NAVAll.txt "/tmp/${DATE}.txt"
+          gzip -c "/tmp/${DATE}.txt" > "nav-archive/${DATE}.txt.gz"
 
       - name: Commit
         run: |
