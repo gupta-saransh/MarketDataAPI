@@ -1,5 +1,9 @@
 import { sql } from '../db/index.js'
 
+// Pagination bounds — keep result sets small and predictable.
+const DEFAULT_LIMIT = 20
+const MAX_LIMIT     = 100
+
 // ── SQL (portable between SQLite and Postgres; `?` placeholders) ──
 
 const LIST = `
@@ -78,9 +82,14 @@ export default async function schemesRoutes(fastify) {
 
   // GET /schemes?q=&fund_house_id=&category_id=&broad_category=&page=1&limit=20
   fastify.get('/', async (req) => {
-    const { q, fund_house_id, category_id, broad_category, page = 1, limit = 20 } = req.query
+    const { q, fund_house_id, category_id, broad_category } = req.query
 
-    const offset   = (Number(page) - 1) * Number(limit)
+    // Clamp pagination to safe bounds — guards against unbounded result sets,
+    // NaN (e.g. ?limit=abc), and negative offsets (e.g. ?page=-5).
+    const page   = Math.max(1, Math.floor(Number(req.query.page) || 1))
+    const limit  = Math.min(MAX_LIMIT, Math.max(1, Math.floor(Number(req.query.limit) || DEFAULT_LIMIT)))
+    const offset = (page - 1) * limit
+
     const search   = q ? `%${q}%` : null
     const fhId     = fund_house_id  ? Number(fund_house_id)  : null
     const catId    = category_id    ? Number(category_id)    : null
@@ -89,9 +98,9 @@ export default async function schemesRoutes(fastify) {
     const filters = [search, search, fhId, fhId, catId, catId, broadCat, broadCat]
 
     const countRow = await sql.get(LIST_COUNT, filters)
-    const data     = await sql.all(LIST, [...filters, Number(limit), offset])
+    const data     = await sql.all(LIST, [...filters, limit, offset])
 
-    return { total: Number(countRow.total), page: Number(page), limit: Number(limit), data }
+    return { total: Number(countRow.total), page, limit, data }
   })
 
   // GET /schemes/isin/:isin  — lookup by ISIN (growth or div-reinvestment)

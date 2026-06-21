@@ -10,6 +10,7 @@
 import 'dotenv/config'
 import Fastify from 'fastify'
 import cors from '@fastify/cors'
+import rateLimit from '@fastify/rate-limit'
 
 import { sql } from './db/index.js'
 import { openapi } from './openapi.js'
@@ -20,10 +21,31 @@ import schemesRoutes    from './routes/schemes.js'
 import syncRoutes       from './routes/sync.js'
 
 export async function build(opts = {}) {
-  const app = Fastify({ logger: opts.logger ?? true })
+  // trustProxy lets Fastify derive req.ip from X-Forwarded-For — required for
+  // correct per-client rate limiting behind Vercel's proxy.
+  const app = Fastify({ logger: opts.logger ?? true, trustProxy: true })
 
   // Public API — open CORS so anyone can call it from the browser.
   await app.register(cors, { origin: '*' })
+
+  // Rate limit every client (keyed by IP). In-memory store: on Vercel this is
+  // per-warm-container, so it throttles bursts rather than enforcing a global
+  // cap — good enough to blunt abuse without a Redis dependency.
+  await app.register(rateLimit, {
+    max: Number(process.env.RATE_LIMIT_MAX ?? 2500),
+    timeWindow: process.env.RATE_LIMIT_WINDOW ?? '1 minute',
+  })
+
+  // Hide internal error details from clients (info disclosure). 4xx messages
+  // are safe and preserved; 5xx are logged server-side and returned generic.
+  app.setErrorHandler((err, req, reply) => {
+    const status = err.statusCode ?? 500
+    if (status >= 500) {
+      req.log.error(err)
+      return reply.code(500).send({ error: 'Internal Server Error' })
+    }
+    return reply.code(status).send({ error: err.message })
+  })
 
   await app.register(fundHousesRoutes, { prefix: '/fund-houses' })
   await app.register(categoriesRoutes, { prefix: '/categories' })

@@ -12,7 +12,8 @@ export const openapi = {
     version: '1.0.0',
     description:
       'Free, public REST API for Indian mutual fund schemes and their NAV history. '
-      + 'Data sourced from mfapi.in. No authentication required.',
+      + 'NAV data is sourced daily from AMFI (Association of Mutual Funds in India). '
+      + 'No authentication required.',
   },
   // Relative server — the explorer resolves paths against its configured API base.
   servers: [{ url: '/', description: 'This API' }],
