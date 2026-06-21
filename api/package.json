@@ -10,7 +10,8 @@
     "start": "node --experimental-sqlite server.js",
     "seed": "node --experimental-sqlite pipeline/seed.js",
     "seed:force": "node --experimental-sqlite pipeline/seed.js --force",
-    "migrate": "node --experimental-sqlite pipeline/migrate-to-supabase.js"
+    "migrate": "node --experimental-sqlite pipeline/migrate-to-supabase.js",
+    "test": "node --experimental-sqlite --test"
   },
   "dependencies": {
     "@fastify/cors": "^9.0.1",

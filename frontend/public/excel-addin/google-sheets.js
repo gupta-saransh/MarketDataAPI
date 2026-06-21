@@ -4,10 +4,33 @@
 
 const API_BASE = 'https://market-data-api-psi.vercel.app/api';
 
+// Cached GET. NAV data changes at most once a day, so identical requests are
+// served from CacheService for 6 hours — this is what keeps you under Apps
+// Script's daily UrlFetchApp quota when many cells recalc repeatedly.
 function mfGet_(url) {
+  const cache = CacheService.getScriptCache();
+  const key   = _cacheKey_(url);
+
+  const hit = cache.get(key);
+  if (hit) return JSON.parse(hit);
+
   const res = UrlFetchApp.fetch(url, { muteHttpExceptions: true });
   if (res.getResponseCode() !== 200) throw new Error('HTTP ' + res.getResponseCode());
-  return JSON.parse(res.getContentText());
+
+  const text = res.getContentText();
+  try { cache.put(key, text, 21600); } catch (e) { /* >100KB: skip caching */ }
+  return JSON.parse(text);
+}
+
+// Stable, length-safe cache key (cache keys max 250 chars) — MD5 hex of the URL.
+function _cacheKey_(url) {
+  const bytes = Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, url);
+  let hex = '';
+  for (let i = 0; i < bytes.length; i++) {
+    const b = (bytes[i] + 256) % 256;
+    hex += (b < 16 ? '0' : '') + b.toString(16);
+  }
+  return 'mf_' + hex;
 }
 
 // Accepts a Date cell, "DD-MM-YYYY" string, or "YYYY-MM-DD" string.
@@ -128,4 +151,42 @@ function _lastTwoNavs_(code) {
   const d = mfGet_(API_BASE + '/schemes/' + code + '/nav?startDate=' + start + '&endDate=' + end);
   if (!d.data || d.data.length < 2) throw new Error('Not enough NAV data');
   return d.data;
+}
+
+// Fetches NAV history for the last `days` calendar days, oldest-first.
+function _navWindow_(code, days) {
+  const today = new Date();
+  const past  = new Date(today.getTime() - days * 24 * 60 * 60 * 1000);
+  const start = Utilities.formatDate(past,  'Asia/Kolkata', 'yyyy-MM-dd');
+  const end   = Utilities.formatDate(today, 'Asia/Kolkata', 'yyyy-MM-dd');
+  const d = mfGet_(API_BASE + '/schemes/' + code + '/nav?startDate=' + start + '&endDate=' + end);
+  if (!d.data || !d.data.length) throw new Error('No NAV data');
+  return d.data.slice().reverse(); // API is newest-first → flip to chronological
+}
+
+/**
+ * Returns a NAV trend series for use with SPARKLINE.
+ * Usage:  =SPARKLINE(MF_NAV_SERIES(101762, 120))
+ * @param {number} code Scheme code
+ * @param {number} days How many days back to plot (default 120)
+ * @return {number[]} NAV values, oldest → newest
+ * @customfunction
+ */
+function MF_NAV_SERIES(code, days) {
+  return _navWindow_(code, days || 120).map(function (r) { return r.nav; });
+}
+
+/**
+ * Returns the % return of a scheme over the last `days` days (NAV-based).
+ * Usage:  =MF_RETURN(101762, 365)   // 1-year   |   730 → 2-year
+ * @param {number} code Scheme code
+ * @param {number} days Look-back window in days (default 365)
+ * @return {number} Percentage return over the period (e.g. 14.2 means +14.2%)
+ * @customfunction
+ */
+function MF_RETURN(code, days) {
+  const series = _navWindow_(code, days || 365);
+  const first  = series[0].nav;                 // oldest in window
+  const last   = series[series.length - 1].nav; // most recent
+  return ((last - first) / first) * 100;
 }
