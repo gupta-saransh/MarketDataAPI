@@ -1,15 +1,9 @@
 # MFAPI — India Mutual Fund Data API + Explorer
 
-![Node.js](https://img.shields.io/badge/Node.js-22-339933?logo=nodedotjs&logoColor=white)
-![Fastify](https://img.shields.io/badge/Fastify-4-000000?logo=fastify&logoColor=white)
-![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black)
-![Vite](https://img.shields.io/badge/Vite-5-646CFF?logo=vite&logoColor=white)
-![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6?logo=typescript&logoColor=white)
-![CockroachDB](https://img.shields.io/badge/CockroachDB-Serverless-6933FF?logo=cockroachlabs&logoColor=white)
-![Vercel](https://img.shields.io/badge/Vercel-deployed-000000?logo=vercel&logoColor=white)
-![MCP](https://img.shields.io/badge/MCP-enabled-8A2BE2)
+[![CI](https://github.com/gupta-saransh/MarketDataAPI/actions/workflows/test.yml/badge.svg)](https://github.com/gupta-saransh/MarketDataAPI/actions/workflows/test.yml)
+[![API](https://img.shields.io/badge/dynamic/json?url=https://market-data-api-psi.vercel.app/api/health&query=$.status&label=live%20API&color=brightgreen)](https://market-data-api-psi.vercel.app/api/health)
 [![License](https://img.shields.io/badge/License-Apache_2.0-D22128?logo=apache&logoColor=white)](LICENSE)
-[![API](https://img.shields.io/badge/dynamic/json?url=https://market-data-api-psi.vercel.app/api/health&query=$.status&label=API&color=brightgreen)](https://market-data-api-psi.vercel.app/api/health)
+
 
 > A free, public REST API for Indian mutual fund schemes and their NAV history, with a
 > Swagger-style web explorer — plus an **MCP server** so AI agents can query the data too.
