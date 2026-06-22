@@ -2,11 +2,11 @@
 
 A free, public REST API for Indian mutual fund schemes and their NAV history,
 plus a Swagger-style web explorer. Data is seeded from [mfapi.in](https://api.mfapi.in)
-into a local SQLite database (~9,183 active schemes, 2-year NAV history), then
-migrated to Supabase for production. The API is served via Fastify and runs
-unchanged on both SQLite and Postgres.
+into a local SQLite database (~14,583 schemes, 6-year NAV history), then
+migrated to CockroachDB Serverless for production. The API is served via Fastify
+and runs unchanged on both SQLite and Postgres.
 
-**Goal / end state:** GitHub → Supabase (data) → Vercel (deploy) → public API + hosted explorer.
+**Goal / end state:** GitHub → CockroachDB (data) → Vercel (deploy) → public API + hosted explorer.
 
 ---
 
@@ -17,7 +17,7 @@ unchanged on both SQLite and Postgres.
               ├── /            → frontend explorer (static files from frontend/dist)
               └── /api/*       → Fastify API (serverless function: api/vercel.js)
                                     │
-                                    └─► Supabase Postgres (prod) OR SQLite (dev)
+                                    └─► CockroachDB Serverless (prod) OR SQLite (dev)
 ```
 
 **Database backend is chosen by ONE env var — `DATABASE_URL`:**
@@ -25,7 +25,7 @@ unchanged on both SQLite and Postgres.
 | `DATABASE_URL` | Backend | Where |
 |---|---|---|
 | _unset_ | SQLite (`./mfapi.db`) | local dev |
-| set | Postgres via `pg` | production / Vercel / Supabase |
+| set | Postgres via `pg` | production / Vercel / CockroachDB |
 
 **Frontend → API base URL: `VITE_API_URL` (default `/api`)**
 - Dev: Vite proxies `/api/*` → `localhost:3001` (strips `/api` prefix).
@@ -55,20 +55,29 @@ MFAPI/
 │   │   ├── index.js              ← DB ADAPTER — sql.all/get/run; SQLite or Postgres by DATABASE_URL
 │   │   ├── client.js             ← Raw DatabaseSync handle (seed.js only)
 │   │   ├── schema.sql            ← SQLite schema + indexes
-│   │   └── schema.postgres.sql   ← Postgres schema + pg_trgm + indexes (run once in Supabase)
+│   │   └── schema.postgres.sql   ← Postgres schema + pg_trgm + indexes (run once in CockroachDB)
+│   ├── lib/
+│   │   ├── finance.js            ← Pure financial math (CAGR, rolling returns, Sharpe, SIP/XIRR)
+│   │   └── queries.js            ← Shared data-access layer (SQL + shaping); used by REST routes AND MCP
 │   ├── pipeline/
-│   │   ├── seed.js               ← Seeds SQLite from mfapi.in (~9k schemes, resumable)
-│   │   └── migrate-to-supabase.js← One-time SQLite → Postgres copy (BATCH=5000, idempotent)
+│   │   ├── seed.js               ← Seeds SQLite from mfapi.in (~14k schemes, resumable)
+│   │   ├── migrate-to-supabase.js← Legacy — one-time SQLite → Supabase copy (deprecated)
+│   │   ├── migrate-to-cockroach.js← One-time SQLite → CockroachDB copy (BATCH=5000, idempotent)
+│   │   └── prune.js              ← Removes nav_history rows older than NAV_YEARS
 │   ├── routes/
 │   │   ├── fund-houses.js        ← GET /fund-houses
 │   │   ├── categories.js         ← GET /categories
 │   │   ├── schemes.js            ← GET /schemes, /schemes/:code, /schemes/isin/:isin,
 │   │   │                            /:code/nav, /:code/nav/latest
-│   │   └── sync.js               ← POST /sync-nav (AMFI NAV sync, bearer-auth)
+│   │   ├── analytics.js          ← GET /:code/returns, /rolling, /risk, /sip
+│   │   ├── sync.js               ← POST /sync-nav (AMFI NAV sync, bearer-auth)
+│   │   └── mcp.js                ← POST /mcp — MCP server (Streamable HTTP) for AI agents; see MCP.md
+│   ├── test/
+│   │   └── finance.test.js       ← Node test runner unit tests for lib/finance.js
 │   ├── mfFileMapper.csv          ← 6,778 scheme name mappings
 │   ├── mfHouseMapper.csv         ← 42 fund houses
 │   ├── mfTypeMapper.csv          ← 43 scheme categories
-│   ├── mfapi.db                  ← SQLite DB (gitignored, ~300 MB seeded with 2yr history)
+│   ├── mfapi.db / market-data-api.db ← SQLite DB (gitignored, ~1 GB seeded with 6yr history)
 │   ├── package.json
 │   └── .env.example
 ├── frontend/                     ← React 18 + Vite 5 + TypeScript + Tailwind v3
@@ -90,6 +99,7 @@ MFAPI/
 │           ├── TryItPanel.tsx    ← param inputs → URL preview → Run → response
 │           └── ResponseView.tsx  ← status / timing / copy / JSON
 ├── DEPLOYMENT.md
+├── MCP.md                        ← MCP server design + status (AI-agent access to the data)
 └── CLAUDE.md                     ← this file
 ```
 
@@ -99,10 +109,10 @@ MFAPI/
 
 - **Backend**: Node.js 22 ESM, Fastify v4, `@fastify/cors`, `@fastify/rate-limit`
   - Dev DB: `node:sqlite` (`DatabaseSync`, `--experimental-sqlite`)
-  - Prod DB: `pg` (node-postgres) → Supabase Postgres
+  - Prod DB: `pg` (node-postgres) → CockroachDB Serverless (PostgreSQL wire-compatible)
 - **Frontend**: React 18, Vite 5, TypeScript (strict), Tailwind CSS v3. No router, no fetch lib.
 - **Data**: [mfapi.in](https://api.mfapi.in) (initial seed); [AMFI NAVAll.txt](https://portal.amfiindia.com/spages/NAVAll.txt) (daily sync)
-- **Deployment**: Vercel (static frontend + serverless API function), Supabase (Postgres)
+- **Deployment**: Vercel (static frontend + serverless API function), CockroachDB Serverless (Postgres)
 
 ---
 
@@ -124,13 +134,15 @@ Chosen at startup via top-level `await`. Both adapters:
 - **Write all SQL once, portable to both engines**
 
 SQLite adapter: `DatabaseSync` + WAL + FK + synchronous=NORMAL PRAGMAs + prepared-statement cache.
-Postgres adapter: `pg.Pool` + `ssl: { rejectUnauthorized: false }` (required by Supabase).
+Postgres adapter: `pg.Pool` + `ssl: { rejectUnauthorized: false }` + `pg.types.setTypeParser(1082, val => val)` to return DATE columns as `'YYYY-MM-DD'` strings instead of JS Date objects.
 
 `node:sqlite` is dynamically imported only when `DATABASE_URL` is unset — Vercel never needs `--experimental-sqlite`.
 
+**CockroachDB quirk:** integer columns (e.g. `scheme_code`) are returned as **strings** (`"101762"` not `101762`) by the `pg` driver against CockroachDB. This is known CockroachDB behavior and is non-breaking — all routes treat scheme_code as an opaque identifier.
+
 ### App Factory Split
 
-- `app.js`: `build()` → Fastify instance, no `.listen()`. Registers CORS, **rate limiting**, **a global error handler**, all route plugins, `/health`, `/openapi.json`, and the **Axiom analytics hook**. Built with `trustProxy: true` so `req.ip` resolves to the real client IP behind Vercel's proxy.
+- `app.js`: `build()` → Fastify instance, no `.listen()`. Registers CORS, **rate limiting**, **a global error handler**, all route plugins (including `analytics.js` at `/schemes` prefix), `/health`, `/openapi.json`, and the **Axiom analytics hook**. Built with `trustProxy: true` so `req.ip` resolves to the real client IP behind Vercel's proxy.
 - `server.js`: local dev — `build()` + `.listen(3001)`.
 - `vercel.js`: Vercel serverless — builds once per warm container, strips `/api` prefix from `req.url`, then `app.server.emit('request', req, res)`.
 
@@ -152,9 +164,38 @@ Auth: `Authorization: Bearer <SYNC_NAV_SECRET>`. If `SYNC_NAV_SECRET` is unset, 
 
 Returns: `{ nav_date, parsed, inserted, skipped }`.
 
+### Analytics Routes — `api/routes/analytics.js` + `api/lib/finance.js`
+
+Four derived-metric endpoints registered at `/schemes/:code/*`. All read from `nav_history`, compute in-process, return JSON. No writes.
+
+- **`GET /schemes/:code/returns`** — trailing returns (1W/1M/3M/6M/1Y/2Y/3Y/5Y/max) + since-inception CAGR.
+- **`GET /schemes/:code/rolling?window=3Y&beat=12`** — rolling-window CAGR distribution; optional `beat` param (in % annualised) returns fraction of windows that beat the threshold.
+- **`GET /schemes/:code/risk?rf=6`** — annualised volatility, max drawdown, Sharpe ratio (risk-free rate `rf` in %, default 6).
+- **`GET /schemes/:code/sip?amount=5000&from=YYYY-MM-DD&to=YYYY-MM-DD`** — monthly SIP simulation: total invested, current value, absolute gain, XIRR.
+
+Pure math lives in `lib/finance.js` (no I/O, trivially unit-testable). Tests in `api/test/finance.test.js` (Node built-in test runner: `npm test`).
+
+### MCP Server — `api/routes/mcp.js` (+ `api/lib/queries.js`)
+
+Exposes the read-only data to AI agents over the Model Context Protocol at `POST /mcp`
+(public `/api/mcp`). **Remote, stateless Streamable HTTP**: a fresh `McpServer` +
+`StreamableHTTPServerTransport` (`sessionIdGenerator: undefined`, `enableJsonResponse: true`)
+is built per request — required on Vercel, where no session/connection survives between
+invocations. The Fastify handler `reply.hijack()`s and hands `request.raw`/`reply.raw` +
+the parsed body to the transport. **No new serverless function** (rides inside
+`api/vercel.js`), **no `vercel.json` change**, **no Anthropic dependency** (uses
+`@modelcontextprotocol/sdk` — the agent-server protocol, not the Claude API).
+
+11 read-only tools (search/detail/ISIN/NAV/latest + returns/rolling/risk/sip + catalogs),
+each with a zod `outputSchema` returning `structuredContent`. `/sync-nav` is **not**
+exposed. Tools call `lib/queries.js` directly — the **shared data-access layer** that the
+REST routes also use, so SQL lives once and the two surfaces can't drift. Open auth
+(reuses the global rate limiter); MCP traffic is excluded from the Axiom hook for now.
+**Full design + status: `MCP.md`.**
+
 ### OpenAPI Spec — `api/openapi.js`
 
-Hand-written OpenAPI 3.1, served at `GET /openapi.json`. **Not auto-generated.** The frontend renders this directly — update it whenever routes change. Example data uses real values from the DB (scheme 101762, HDFC Flexi Cap Fund - Growth Plan).
+Hand-written OpenAPI 3.1, served at `GET /openapi.json`. **Not auto-generated.** The frontend renders this directly — update it whenever routes change. Example data uses real values from the DB (scheme 101762, HDFC Flexi Cap Fund - Growth Plan). Analytics endpoints (returns/rolling/risk/sip) are documented.
 
 ---
 
@@ -179,7 +220,7 @@ nav_history        (scheme_code→schemes CASCADE, nav_date TEXT, nav REAL,
 - `idx_schemes_name` on `schemes(scheme_name)` — ORDER BY
 - `idx_schemes_name_trgm` GIN on `lower(scheme_name)` — Postgres only, fast LIKE '%q%'
 
-**DB size:** ~300 MB (2-year NAV history, inactive schemes removed). Seeded with `NAV_YEARS=2`.
+**DB size (CockroachDB production):** 41 fund_houses, 42 categories, 14,583 schemes, ~9.67M nav_history rows, date range 2021-06-20 → 2026-06-20 (5 years migrated; 6th year pending re-run). Seeded with `NAV_YEARS=5`.
 
 ---
 
@@ -220,6 +261,26 @@ GET /schemes/:code/nav?startDate=YYYY-MM-DD&endDate=YYYY-MM-DD
 GET /schemes/:code/nav/latest
 → { scheme_code, scheme_name, nav_date, nav }
    404 → { error: 'No NAV data found' }
+
+GET /schemes/:code/returns
+→ { scheme_code, scheme_name, inception_date, inception_cagr,
+    returns: { 1W, 1M, 3M, 6M, 1Y, 2Y, 3Y, 5Y, max } }   ← null if insufficient history
+   404 → { error: 'No NAV data found for scheme' }
+
+GET /schemes/:code/rolling?window=3Y&beat=12
+→ { scheme_code, scheme_name, window, count, min, max, median, mean,
+    pct_beat (if beat param given) }
+   404 → { error: 'No NAV data found for scheme' }
+
+GET /schemes/:code/risk?rf=6
+→ { scheme_code, scheme_name, annualised_volatility, max_drawdown, sharpe_ratio,
+    risk_free_rate, from_date, to_date, trading_days }
+   404 → { error: 'No NAV data found for scheme' }
+
+GET /schemes/:code/sip?amount=5000&from=YYYY-MM-DD&to=YYYY-MM-DD
+→ { scheme_code, scheme_name, amount_per_month, from_date, to_date,
+    months, total_invested, current_value, absolute_gain, xirr }
+   404 → { error: 'No NAV data found for scheme' }
 
 POST /sync-nav
 Headers: Authorization: Bearer <SYNC_NAV_SECRET>
@@ -289,7 +350,7 @@ Disaster-recovery backup, separate from the sync job. Runs **once daily at 11:30
 
 Fire-and-forget request analytics. An `onResponse` hook POSTs one event per request to Axiom's direct HTTP ingest API (`https://api.axiom.co/v1/datasets/{AXIOM_DATASET}/ingest`, Bearer `AXIOM_TOKEN`). **No Vercel log drain needed** (that requires a Pro plan). Skipped entirely if `AXIOM_TOKEN`/`AXIOM_DATASET` are unset (safe in local dev); `/health` and `/openapi.json` are excluded.
 
-Each event carries ~17 fields: `_time`, `method`, `route` (matched pattern via `req.routeOptions?.url`), `endpoint_type` (mapped label like `nav_latest`/`search`/`scheme_detail`), `status`, `ms` (`reply.elapsedTime`), `scheme_code`, `isin`, `q`, the filter params, `ip` (`x-forwarded-for`), `country`/`city` (Vercel geo headers), `ua`, `referer`. The `fetch` is `.catch(() => {})` — analytics never affects the response.
+Each event carries ~17 fields: `_time`, `method`, `route` (matched pattern via `req.routeOptions?.url`), `endpoint_type` (mapped label like `nav_latest`/`search`/`scheme_detail`/`returns`/`rolling`/`risk`/`sip`), `status`, `ms` (`reply.elapsedTime`), `scheme_code`, `isin`, `q`, the filter params, `ip` (`x-forwarded-for`), `country`/`city` (Vercel geo headers), `ua`, `referer`. The `fetch` is `.catch(() => {})` — analytics never affects the response.
 
 Build Axiom dashboards **manually** panel-by-panel (the auto-wizard chokes on small data). No bar chart exists — use **Top list** for rankings, **Table** for tabular, **Statistic** for single numbers. Set the dashboard time range to "Last 24 hours"/"Last 7 days" (not "Last 15 mins") to avoid "disposed"/"too little data" errors.
 
@@ -317,7 +378,7 @@ Functions: `MF_NAV`, `MF_NAV_DATE`, `MF_NAV_ON(code, date)`, `MF_NAME`, `MF_FUND
 ### `api/.env`
 | Variable | Default | Notes |
 |---|---|---|
-| `DATABASE_URL` | _unset_ | The switch. Unset → SQLite; set → Postgres. |
+| `DATABASE_URL` | _unset_ | The switch. Unset → SQLite; set → Postgres/CockroachDB. |
 | `DB_PATH` | `./mfapi.db` | SQLite path (ignored when DATABASE_URL is set) |
 | `PORT` | `3001` | API listen port (local only) |
 | `PG_POOL_MAX` | `5` | Postgres pool size |
@@ -325,7 +386,7 @@ Functions: `MF_NAV`, `MF_NAV_DATE`, `MF_NAV_ON(code, date)`, `MF_NAME`, `MF_FUND
 | `RATE_LIMIT_MAX` | `2500` | Max requests per window per IP |
 | `RATE_LIMIT_WINDOW` | `1 minute` | Rate-limit window (any `@fastify/rate-limit` duration string) |
 | `CONCURRENCY` | `8` | Parallel mfapi.in requests in seed.js |
-| `NAV_YEARS` | `2` | Years of NAV history to seed |
+| `NAV_YEARS` | `5` | Years of NAV history to seed/migrate |
 | `MFAPI_BASE` | `https://api.mfapi.in` | Seed data source |
 | `AXIOM_TOKEN` | _unset_ | Axiom ingest token. Analytics hook is skipped if unset. |
 | `AXIOM_DATASET` | _unset_ | Axiom dataset name (e.g. `market-data-api`). |
@@ -337,7 +398,7 @@ Functions: `MF_NAV`, `MF_NAV_DATE`, `MF_NAV_ON(code, date)`, `MF_NAME`, `MF_FUND
 | `VITE_DEV_API_TARGET` | `http://localhost:3001` | Vite dev proxy target |
 
 ### Vercel env vars (set in project settings)
-- `DATABASE_URL` — Supabase Transaction pooler connection string (port 6543)
+- `DATABASE_URL` — CockroachDB connection string (`postgresql://user:pass@host:26257/dbname?sslmode=verify-full`)
 - `SYNC_NAV_SECRET` — must match the GitHub Actions secret of the same name
 
 ---
@@ -360,23 +421,23 @@ npm run dev               # http://localhost:5173 (proxies /api → :3001)
 ```
 
 ### npm scripts
-- **api**: `dev` (--watch), `start`, `seed`, `seed:force`, `migrate`
+- **api**: `dev` (--watch), `start`, `seed`, `seed:force`, `migrate:cockroach`, `prune`, `test`
 - **frontend**: `dev`, `build` (`tsc -b && vite build`), `preview`
 
 ---
 
-## Deployment Checklist
+## Deployment Checklist (CockroachDB)
 
 ```
-[ ] npm run seed               — mfapi.db seeded locally (NAV_YEARS=2)
-[ ] Supabase project created   — Mumbai/Singapore region, password saved
-[ ] schema.postgres.sql run    — 4 tables + indexes created in Supabase SQL editor
-[ ] DATABASE_URL in api/.env   — Transaction pooler string, port 6543, URL-encoded password
-[ ] npm run migrate            — ~10-15 min, 3M+ nav_history rows copied (BATCH=5000)
+[ ] npm run seed               — mfapi.db seeded locally (NAV_YEARS=5)
+[ ] CockroachDB Serverless     — cluster created, database created, user + password set
+[ ] schema.postgres.sql run    — 4 tables + indexes created (CockroachDB SQL shell or client)
+[ ] DATABASE_URL in api/.env   — cockroachdb connection string, sslmode=verify-full
+[ ] npm run migrate:cockroach  — ~10-15 min, 9M+ nav_history rows copied (idempotent)
 [ ] SYNC_NAV_SECRET generated  — node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 [ ] Pushed to GitHub
 [ ] Vercel: New Project → import repo → Framework: Other → Root: /
-[ ] Vercel env vars            — DATABASE_URL + SYNC_NAV_SECRET
+[ ] Vercel env vars            — DATABASE_URL (CockroachDB) + SYNC_NAV_SECRET
 [ ] Vercel deploy              — green build, /api/health → driver:postgres
 [ ] GitHub secrets             — SYNC_NAV_SECRET + VERCEL_APP_URL
 [ ] Manual workflow run        — Actions → Sync NAV from AMFI → Run workflow → returns JSON
@@ -387,12 +448,14 @@ npm run dev               # http://localhost:5173 (proxies /api → :3001)
 ## Known Gotchas
 
 - **Vercel zero-config auto-detects every `api/*.js`** as a serverless function → exceeds 12-function Hobby limit. Fixed by using `builds` array in `vercel.json`.
-- **Supabase requires Transaction pooler (port 6543)**, not direct connection (5432). Vercel serverless can't hold persistent connections.
+- **CockroachDB returns integer columns as strings** — `scheme_code` comes back as `"101762"` not `101762` via the `pg` driver. Non-breaking (treated as opaque identifier throughout), but visible in API JSON responses.
+- **CockroachDB connection string** — use `sslmode=verify-full` in the URL; `ssl: { rejectUnauthorized: false }` in `pg.Pool` is sufficient for Serverless.
 - **Password special characters** in `DATABASE_URL` must be URL-encoded (`encodeURIComponent()`).
 - **SQLite cannot run on Vercel** — ephemeral FS. `DATABASE_URL` is required in production.
 - **`openapi.js` is hand-maintained** — update it when routes change.
-- **`mfapi.db` is gitignored** — never commit it (~300 MB).
+- **SQLite DB is gitignored** — never commit it (~1 GB with 6yr history).
 - **Migration is idempotent** (`ON CONFLICT DO NOTHING`) — safe to re-run if interrupted.
+- **`migrate-to-supabase.js` is legacy** — kept for reference, use `migrate-to-cockroach.js` going forward.
 
 ---
 
@@ -402,6 +465,7 @@ npm run dev               # http://localhost:5173 (proxies /api → :3001)
 - **Rate limiting** — 2500 req/min per IP (see Rate Limiting section). Mitigates brute abuse / pool exhaustion.
 - **Pagination clamps** — `limit ≤ 100`, `page ≥ 1`; no unbounded result sets or negative-OFFSET 500s.
 - **Error handler** — 5xx internals hidden from clients (no SQL/schema/conn-string disclosure).
+- **Turso fully removed** — adapter, env vars, npm dependency all stripped. No dead credential surface.
 
 ### Verified safe
 - **SQL injection** — all queries use `?` placeholders bound as params, including `LIKE '%q%'` (the `%q%` is a *parameter*, not interpolated). Only string-built SQL is the batch-insert placeholder list in `sync.js`, which interpolates a row *count*, not user data.
@@ -409,8 +473,8 @@ npm run dev               # http://localhost:5173 (proxies /api → :3001)
 - **Secrets in git** — `api/.env` is gitignored and was **never committed** (history confirmed clean).
 
 ### Open / accepted risks (not yet fixed)
-- **Rotate live secrets** — the Supabase DB password (weak: `Saransh_007#`), `SYNC_NAV_SECRET`, and `AXIOM_TOKEN` are live plaintext in `api/.env` and were read into an AI session. The Supabase pooler is internet-reachable → rotate all three and use a strong DB password.
-- **DB TLS validation disabled** — `ssl: { rejectUnauthorized: false }` in `db/index.js` + `migrate-to-supabase.js` accepts any cert (MITM risk). Correct fix: pin Supabase's CA cert.
+- **Rotate live secrets** — the CockroachDB password, `SYNC_NAV_SECRET`, and `AXIOM_TOKEN` are live in `api/.env` and were read into an AI session. Rotate all three. Old Supabase password (`Saransh_007#`) is now only in `DATABASE_URL_OLD` (dead/renamed key) — decommission Supabase project to fully retire it.
+- **DB TLS validation** — `ssl: { rejectUnauthorized: false }` in `db/index.js` accepts any cert (MITM risk). Low risk for CockroachDB Serverless in practice; correct fix is to pin the CA cert.
 - **`/sync-nav` auth** — fails *open* if `SYNC_NAV_SECRET` is unset (expensive unauthenticated write), and uses a non-constant-time `!==` compare (theoretical timing attack). Harden: fail closed in prod + `crypto.timingSafeEqual`.
 - **CORS `origin: '*'`** — accepted (public read-only API; `/sync-nav` is gated by bearer auth).
 - **Analytics PII** — raw client IPs + search terms shipped to Axiom; `x-forwarded-for` is spoofable (only pollutes analytics). Consider a retention policy.
@@ -421,6 +485,7 @@ npm run dev               # http://localhost:5173 (proxies /api → :3001)
 
 - Frontend: `npm run build` passes (tsc strict + vite build, 152 KB JS gzipped to 49 KB).
 - API on SQLite: `/health` → `{driver:'sqlite'}`, all routes return correct data.
-- Supabase migration: completed successfully (~9,183 schemes, ~3M nav_history rows).
-- Vercel deployment: in progress (resolving `builds` config / distDir issues).
+- CockroachDB migration: completed — 41 fund_houses, 42 categories, 14,583 schemes, ~9.67M nav_history rows (2021-06-20 → 2026-06-20).
+- All 12 smoke-test endpoints pass against CockroachDB (health, fund-houses, categories, schemes search, scheme detail, ISIN lookup, nav/latest, nav range, returns, risk, sip, 404 handling).
+- Vercel deployment: pending cutover — update `DATABASE_URL` in Vercel project settings to CockroachDB URL and redeploy.
 - AMFI sync: `POST /sync-nav` logic verified; GitHub Actions workflow ready.

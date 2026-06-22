@@ -1,13 +1,5 @@
-import { sql } from '../db/index.js'
-
-const LIST = `
-  SELECT id, name, broad_category
-  FROM scheme_categories
-  ORDER BY broad_category, name
-`
+import { listCategories } from '../lib/queries.js'
 
 export default async function categoriesRoutes(fastify) {
-  fastify.get('/', async () => {
-    return { data: await sql.all(LIST) }
-  })
+  fastify.get('/', async () => ({ data: await listCategories() }))
 }

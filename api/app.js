@@ -20,6 +20,7 @@ import categoriesRoutes from './routes/categories.js'
 import schemesRoutes    from './routes/schemes.js'
 import analyticsRoutes  from './routes/analytics.js'
 import syncRoutes       from './routes/sync.js'
+import mcpRoutes        from './routes/mcp.js'
 
 export async function build(opts = {}) {
   // trustProxy lets Fastify derive req.ip from X-Forwarded-For — required for
@@ -53,6 +54,7 @@ export async function build(opts = {}) {
   await app.register(schemesRoutes,    { prefix: '/schemes' })
   await app.register(analyticsRoutes,  { prefix: '/schemes' })
   await app.register(syncRoutes)
+  await app.register(mcpRoutes)
 
   app.get('/health', async () => ({ status: 'ok', driver: sql.driver }))
 
@@ -80,7 +82,8 @@ export async function build(opts = {}) {
   }
 
   app.addHook('onResponse', (req, reply, done) => {
-    if (req.url === '/health' || req.url.startsWith('/openapi.json')) return done()
+    // MCP traffic is excluded for now (per-tool analytics deferred — see MCP.md).
+    if (req.url === '/health' || req.url.startsWith('/openapi.json') || req.url.startsWith('/mcp')) return done()
 
     if (process.env.AXIOM_TOKEN && process.env.AXIOM_DATASET) {
       const route       = req.routeOptions?.url ?? req.url
