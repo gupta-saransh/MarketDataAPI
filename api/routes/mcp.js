@@ -30,11 +30,17 @@ const id = z.union([z.string(), z.number()])
 
 // ── result helpers ────────────────────────────────────────────
 
-// Success: a text summary for humans + structuredContent for agents.
-const ok = (structured, summary) => ({
-  content: [{ type: 'text', text: summary ?? JSON.stringify(structured) }],
-  structuredContent: structured,
-})
+// Success: the FULL data serialized into the text block (a one-line summary
+// followed by the JSON), plus structuredContent. The text block must carry the
+// data — most MCP clients feed `content` text to the model and only secondarily
+// use structuredContent, so a summary-only text block hides the actual rows.
+const ok = (structured, summary) => {
+  const json = JSON.stringify(structured)
+  return {
+    content: [{ type: 'text', text: summary ? `${summary}\n${json}` : json }],
+    structuredContent: structured,
+  }
+}
 
 // Failure: text-only, flagged so the agent sees it as an error (no structured
 // content — outputSchema validation is skipped when isError is true).

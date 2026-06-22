@@ -1,12 +1,12 @@
 # MFAPI — MCP Server
 
-> **Status: implemented (local-verified, not yet deployed).** Exposes the MFAPI REST
-> data to AI agents over the Model Context Protocol (MCP) as a remote, stateless
-> Streamable HTTP server at `POST /api/mcp`. Built with the four recommended decisions
-> (see [Decisions](#decisions-locked)). Verified locally against CockroachDB with a
-> real MCP client (all 11 tools list + call, structured output validates, error paths
-> work) and the existing REST routes confirmed unchanged. **Not yet deployed** — ships
-> on the next Vercel push.
+> **Status: live in production** at `https://market-data-api-psi.vercel.app/api/mcp`.
+> Exposes the MFAPI REST data to AI agents over the Model Context Protocol (MCP) as a
+> remote, stateless Streamable HTTP server at `POST /api/mcp`. Built with the four
+> recommended decisions (see [Decisions](#decisions-locked)). Verified against
+> CockroachDB both locally and in production with a real MCP client and raw JSON-RPC:
+> all 11 tools list + call, structured output validates, error paths work, `GET /api/mcp`
+> → 405, and the existing REST routes are unchanged.
 
 The goal: let AI agents (Claude's MCP connector, Claude Desktop/web custom connectors,
 and any other MCP client) consume the mutual-fund data the same way the web explorer
@@ -110,8 +110,12 @@ Design rules:
   raises call rate.
 - **`scheme_code` is a string in every schema.** CockroachDB returns integer columns as
   strings (`"101762"`), and the codebase already treats it as an opaque identifier.
-- **Return `structuredContent` + a text summary.** Give each tool an `outputSchema` so
-  agents receive typed data, with a short human-readable text block alongside.
+- **The text block must carry the full data**, not just a summary. Each tool returns
+  `structuredContent` (validated against its `outputSchema`) **and** a `content` text
+  block containing a one-line summary followed by the serialized JSON. Most MCP clients
+  feed the `content` text to the model and only secondarily use `structuredContent` — a
+  summary-only text block hides the actual rows from the agent (observed in the wild: a
+  search returning "Found 10 schemes" with no codes, leaving the agent unable to proceed).
 
 ---
 
@@ -188,7 +192,8 @@ All four shipped on the recommended option:
 - [x] Register the route in [api/app.js](api/app.js); add `mcp:inspect` npm script.
 - [x] Local smoke test (real MCP client: 11 tools list + call, structured output validates,
       error paths) + REST routes confirmed unchanged + 26 unit tests pass.
-- [ ] **Deploy** — push to Vercel, then verify `POST /api/mcp` via the Claude MCP connector.
+- [x] **Deploy** — live at `https://market-data-api-psi.vercel.app/api/mcp`; verified in
+      production (tools/list + tools/call, structured output, isError path, GET → 405).
 - [ ] Document the public MCP URL in the explorer / README alongside the Google Sheets functions.
 
 No `vercel.json` change, no new serverless function, no Anthropic dependency.
