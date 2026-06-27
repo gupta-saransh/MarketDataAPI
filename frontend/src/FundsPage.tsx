@@ -22,12 +22,7 @@ interface SchemeDetail {
 }
 interface Period { return_pct: number; annualized: boolean }
 interface ReturnsResp { as_of: string; latest_nav: number; returns: Record<string, Period | null> }
-interface RiskResp {
-  annualized_volatility_pct: number
-  max_drawdown_pct: number
-  cagr_pct: number
-  sharpe: number | null
-}
+interface Risk { vol: number; maxDD: number; cagr: number; sharpe: number | null }
 interface SearchRow {
   scheme_code: string | number
   scheme_name: string
@@ -72,6 +67,31 @@ function rangeReturn(slice: NavPoint[]): Period | null {
   return { return_pct: (b / a - 1) * 100, annualized: false }
 }
 
+const RISK_FREE = 6 // % — for the Sharpe ratio
+
+// Annualised volatility, max drawdown, CAGR and Sharpe over a slice — computed
+// client-side (same formulas as the API's finance.js) so they track the
+// selected chart range. The /risk endpoint only covers the whole history.
+function computeRisk(slice: NavPoint[]): Risk | null {
+  if (slice.length < 3) return null
+  const rets: number[] = []
+  for (let i = 1; i < slice.length; i++) rets.push(slice[i].nav / slice[i - 1].nav - 1)
+  const mean = rets.reduce((s, r) => s + r, 0) / rets.length
+  const variance = rets.reduce((s, r) => s + (r - mean) ** 2, 0) / (rets.length - 1)
+  const vol = Math.sqrt(variance) * Math.sqrt(252) * 100
+  let peak = slice[0].nav
+  let maxDD = 0
+  for (const p of slice) {
+    if (p.nav > peak) peak = p.nav
+    const dd = (p.nav - peak) / peak
+    if (dd < maxDD) maxDD = dd
+  }
+  const years = (Date.parse(slice[slice.length - 1].nav_date) - Date.parse(slice[0].nav_date)) / (365.25 * 864e5)
+  const cagr = years > 0 ? (Math.pow(slice[slice.length - 1].nav / slice[0].nav, 1 / years) - 1) * 100 : 0
+  const sharpe = vol > 0 ? (cagr - RISK_FREE) / vol : null
+  return { vol, maxDD: Math.abs(maxDD) * 100, cagr, sharpe }
+}
+
 const AVATAR_COLORS = ['bg-rose-600', 'bg-emerald-600', 'bg-indigo-600', 'bg-amber-600', 'bg-sky-600', 'bg-violet-600', 'bg-teal-600']
 function avatarColor(s: string): string {
   let h = 0
@@ -90,7 +110,6 @@ export default function FundsPage() {
   const [detail, setDetail] = useState<SchemeDetail | null>(null)
   const [series, setSeries] = useState<NavPoint[]>([])
   const [ret, setRet] = useState<ReturnsResp | null>(null)
-  const [risk, setRisk] = useState<RiskResp | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -114,14 +133,12 @@ export default function FundsPage() {
       getJson<{ data: SchemeDetail }>(`/schemes/${code}`),
       getJson<{ data: NavPoint[] }>(`/schemes/${code}/nav`),
       getJson<ReturnsResp>(`/schemes/${code}/returns`).catch(() => null),
-      getJson<RiskResp>(`/schemes/${code}/risk`).catch(() => null),
     ])
-      .then(([d, nav, r, rk]) => {
+      .then(([d, nav, r]) => {
         if (!active) return
         setDetail(d.data)
         setSeries([...nav.data].reverse()) // API returns newest-first → ascending
         setRet(r)
-        setRisk(rk)
         setLoading(false)
       })
       .catch((e) => {
@@ -140,13 +157,15 @@ export default function FundsPage() {
   }
 
   const visible = sliceByRange(series, range)
+  const riskFull = computeRisk(series)        // fund property → drives the risk chip
+  const riskRange = computeRisk(visible)      // tracks the selected range → drives the tiles
   const headline = ret?.returns?.[RANGE_KEY[range]] ?? rangeReturn(visible)
   const headlineLabel = range === 'All' ? 'Since inception' : headline?.annualized ? `${range} annualised` : `${range} return`
   const oneDay = series.length >= 2
     ? ((series[series.length - 1].nav - series[series.length - 2].nav) / series[series.length - 2].nav) * 100
     : null
 
-  const chips = [detail?.broad_category, detail?.category, riskLabel(risk?.annualized_volatility_pct)].filter(Boolean) as string[]
+  const chips = [detail?.broad_category, detail?.category, riskLabel(riskFull?.vol)].filter(Boolean) as string[]
   const avatarText = (detail?.fund_house ?? detail?.scheme_name ?? '?').trim().charAt(0).toUpperCase()
 
   return (
@@ -260,13 +279,14 @@ export default function FundsPage() {
                   <Stat label={`NAV · ${detail.nav_date ?? '—'}`} value={detail.nav != null ? `₹${inr(detail.nav)}` : '—'} />
                   <Stat label="1Y return" value={ret?.returns?.['1Y'] ? signed(ret.returns['1Y'].return_pct) : '—'} tone={ret?.returns?.['1Y']?.return_pct} />
                   <Stat label="3Y return (CAGR)" value={ret?.returns?.['3Y'] ? signed(ret.returns['3Y'].return_pct) : '—'} tone={ret?.returns?.['3Y']?.return_pct} />
-                  <Stat label="Volatility (ann.)" value={risk ? `${risk.annualized_volatility_pct.toFixed(2)}%` : '—'} />
-                  <Stat label="Max drawdown" value={risk ? `-${risk.max_drawdown_pct.toFixed(2)}%` : '—'} tone={-1} />
-                  <Stat label="Sharpe ratio" value={risk?.sharpe != null ? risk.sharpe.toFixed(2) : '—'} />
+                  <Stat label={`Volatility (ann.) · ${range}`} value={riskRange ? `${riskRange.vol.toFixed(2)}%` : '—'} />
+                  <Stat label={`Max drawdown · ${range}`} value={riskRange ? `-${riskRange.maxDD.toFixed(2)}%` : '—'} tone={-1} />
+                  <Stat label={`Sharpe ratio · ${range}`} value={riskRange?.sharpe != null ? riskRange.sharpe.toFixed(2) : '—'} />
                 </div>
 
                 <p className="mt-6 text-xs text-slate-400">
-                  Returns &gt; 1Y are annualised (CAGR). Risk metrics use daily NAV over the full history.
+                  1Y / 3Y returns are fixed trailing periods (annualised &gt; 1Y). Volatility, max drawdown
+                  &amp; Sharpe are computed over the selected range ({range}) — short ranges are noisier.
                   Data from AMFI via the Market Data API — not investment advice.
                 </p>
               </>
