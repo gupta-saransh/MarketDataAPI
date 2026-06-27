@@ -1,4 +1,4 @@
-# MFAPI — India Mutual Fund Data API + Explorer
+# Market Data API — Indian Mutual Funds + NAV History
 
 A free, public REST API for Indian mutual fund schemes and their NAV history,
 plus a Swagger-style web explorer. Data is seeded from [mfapi.in](https://api.mfapi.in)
@@ -24,7 +24,7 @@ and runs unchanged on both SQLite and Postgres.
 
 | `DATABASE_URL` | Backend | Where |
 |---|---|---|
-| _unset_ | SQLite (`./mfapi.db`) | local dev |
+| _unset_ | SQLite (`./market-data-api.db`) | local dev |
 | set | Postgres via `pg` | production / Vercel / CockroachDB |
 
 **Frontend → API base URL: `VITE_API_URL` (default `/api`)**
@@ -36,7 +36,7 @@ and runs unchanged on both SQLite and Postgres.
 ## Project Layout
 
 ```
-MFAPI/
+market-data-api/
 ├── package.json                  ← root-only: "vercel-build" script for @vercel/static-build
 ├── vercel.json                   ← single Vercel project: builds api fn + frontend, routes /api/*
 ├── .github/
@@ -77,7 +77,7 @@ MFAPI/
 │   ├── mfFileMapper.csv          ← 6,778 scheme name mappings
 │   ├── mfHouseMapper.csv         ← 42 fund houses
 │   ├── mfTypeMapper.csv          ← 43 scheme categories
-│   ├── mfapi.db / market-data-api.db ← SQLite DB (gitignored, ~1 GB seeded with 6yr history)
+│   ├── market-data-api.db        ← SQLite DB (gitignored, ~1 GB seeded with 6yr history)
 │   ├── package.json
 │   └── .env.example
 ├── frontend/                     ← React 18 + Vite 5 + TypeScript + Tailwind v3
@@ -379,7 +379,7 @@ Functions: `MF_NAV`, `MF_NAV_DATE`, `MF_NAV_ON(code, date)`, `MF_NAME`, `MF_FUND
 | Variable | Default | Notes |
 |---|---|---|
 | `DATABASE_URL` | _unset_ | The switch. Unset → SQLite; set → Postgres/CockroachDB. |
-| `DB_PATH` | `./mfapi.db` | SQLite path (ignored when DATABASE_URL is set) |
+| `DB_PATH` | `./market-data-api.db` | SQLite path (ignored when DATABASE_URL is set) |
 | `PORT` | `3001` | API listen port (local only) |
 | `PG_POOL_MAX` | `5` | Postgres pool size |
 | `SYNC_NAV_SECRET` | _unset_ | Bearer token for POST /sync-nav (skip auth if unset) |
@@ -429,7 +429,7 @@ npm run dev               # http://localhost:5173 (proxies /api → :3001)
 ## Deployment Checklist (CockroachDB)
 
 ```
-[ ] npm run seed               — mfapi.db seeded locally (NAV_YEARS=5)
+[ ] npm run seed               — market-data-api.db seeded locally (NAV_YEARS=5)
 [ ] CockroachDB Serverless     — cluster created, database created, user + password set
 [ ] schema.postgres.sql run    — 4 tables + indexes created (CockroachDB SQL shell or client)
 [ ] DATABASE_URL in api/.env   — cockroachdb connection string, sslmode=verify-full

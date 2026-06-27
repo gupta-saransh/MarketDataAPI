@@ -1,7 +1,7 @@
-# MFAPI — MCP Server
+# Market Data API — MCP Server
 
 > **Status: live in production** at `https://market-data-api-psi.vercel.app/api/mcp`.
-> Exposes the MFAPI REST data to AI agents over the Model Context Protocol (MCP) as a
+> Exposes the Market Data API REST data to AI agents over the Model Context Protocol (MCP) as a
 > remote, stateless Streamable HTTP server at `POST /api/mcp`. Built with the four
 > recommended decisions (see [Decisions](#decisions-locked)). Verified against
 > CockroachDB both locally and in production with a real MCP client and raw JSON-RPC:
@@ -158,8 +158,8 @@ Recommendation: **option 1.**
     model: 'claude-opus-4-8',
     max_tokens: 1024,
     betas: ['mcp-client-2025-11-20'],
-    mcp_servers: [{ type: 'url', url: 'https://<app>.vercel.app/api/mcp', name: 'mfapi' }],
-    tools: [{ type: 'mcp_toolset', mcp_server_name: 'mfapi' }],
+    mcp_servers: [{ type: 'url', url: 'https://<app>.vercel.app/api/mcp', name: 'market-data-api' }],
+    tools: [{ type: 'mcp_toolset', mcp_server_name: 'market-data-api' }],
     messages: [{ role: 'user', content: 'What is the latest NAV of scheme 101762?' }],
   })
   ```

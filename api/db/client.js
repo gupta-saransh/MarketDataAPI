@@ -4,7 +4,7 @@ import { join, dirname } from 'path'
 import { fileURLToPath } from 'url'
 
 const dbPath = process.env.DB_PATH
-  ?? join(dirname(fileURLToPath(import.meta.url)), '..', 'mfapi.db')
+  ?? join(dirname(fileURLToPath(import.meta.url)), '..', 'market-data-api.db')
 
 export const db = new DatabaseSync(dbPath)
 

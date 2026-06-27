@@ -1,5 +1,4 @@
 # Database (large, generated locally by npm run seed)
-api/mfapi.db
 api/*.db
 api/*.db-wal
 api/*.db-shm

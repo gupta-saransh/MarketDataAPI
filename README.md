@@ -1,4 +1,4 @@
-# MFAPI — India Mutual Fund Data API + Explorer
+# Market Data API — Indian Mutual Funds + NAV History
 
 [![CI](https://github.com/gupta-saransh/MarketDataAPI/actions/workflows/test.yml/badge.svg)](https://github.com/gupta-saransh/MarketDataAPI/actions/workflows/test.yml)
 [![API](https://img.shields.io/badge/dynamic/json?url=https://market-data-api-psi.vercel.app/api/health&query=$.status&label=live%20API&color=brightgreen)](https://market-data-api-psi.vercel.app/api/health)
@@ -34,8 +34,8 @@ Point any MCP client at `https://market-data-api-psi.vercel.app/api/mcp` (remote
 Streamable HTTP — no install, no auth). With the Claude API connector:
 
 ```js
-mcp_servers: [{ type: 'url', url: 'https://market-data-api-psi.vercel.app/api/mcp', name: 'mfapi' }],
-tools: [{ type: 'mcp_toolset', mcp_server_name: 'mfapi' }],
+mcp_servers: [{ type: 'url', url: 'https://market-data-api-psi.vercel.app/api/mcp', name: 'market-data-api' }],
+tools: [{ type: 'mcp_toolset', mcp_server_name: 'market-data-api' }],
 ```
 
 Full tool list, design, and testing recipes: **[MCP.md](MCP.md)**.

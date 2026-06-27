@@ -26,7 +26,7 @@ if (!DB_URL) {
   process.exit(1)
 }
 
-const sqlitePath = process.env.DB_PATH ?? join(ROOT, 'mfapi.db')
+const sqlitePath = process.env.DB_PATH ?? join(ROOT, 'market-data-api.db')
 const lite = new DatabaseSync(sqlitePath)
 const pool = new pg.Pool({ connectionString: DB_URL, ssl: { rejectUnauthorized: false } })
 

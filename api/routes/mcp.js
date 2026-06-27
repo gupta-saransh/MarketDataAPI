@@ -78,7 +78,7 @@ const window = z.object({ from: z.string(), to: z.string(), return_pct: z.number
 // ── tool registration ─────────────────────────────────────────
 
 function buildServer() {
-  const server = new McpServer({ name: 'mfapi', version: '1.0.0' })
+  const server = new McpServer({ name: 'market-data-api', version: '1.0.0' })
 
   server.registerTool('search_schemes', {
     title: 'Search mutual fund schemes',

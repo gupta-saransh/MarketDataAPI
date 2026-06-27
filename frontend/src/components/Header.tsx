@@ -28,6 +28,12 @@ export default function Header() {
             >
               ← Home
             </a>
+            <a
+              href="#funds"
+              className="text-sm text-slate-400 transition-colors hover:text-slate-700"
+            >
+              Visualizer
+            </a>
             <div>
               <h1 className="text-xl font-semibold tracking-tight text-slate-900">
                 Market Data API

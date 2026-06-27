@@ -19,7 +19,7 @@ import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
-const DB_PATH   = join(tmpdir(), `mfapi-test-${process.pid}-${Date.now()}.db`)
+const DB_PATH   = join(tmpdir(), `market-data-api-test-${process.pid}-${Date.now()}.db`)
 
 // Force SQLite + temp DB BEFORE app.js (and its db adapter) is imported.
 process.env.DATABASE_URL = ''

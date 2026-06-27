@@ -4,7 +4,7 @@
  * One async query interface, two backends, chosen by env var:
  *
  *   • DATABASE_URL set → Postgres (production — CockroachDB via `pg`)
- *   • unset            → SQLite   (local dev — node:sqlite + ./mfapi.db)
+ *   • unset            → SQLite   (local dev — node:sqlite + ./market-data-api.db)
  *
  * Routes only ever call sql.all / sql.get / sql.run with `?` placeholders.
  * The Postgres adapter rewrites them to $1, $2, …
@@ -20,7 +20,7 @@ async function createSqliteAdapter() {
   const { DatabaseSync } = await import('node:sqlite')
 
   const dbPath = process.env.DB_PATH
-    ?? join(dirname(fileURLToPath(import.meta.url)), '..', 'mfapi.db')
+    ?? join(dirname(fileURLToPath(import.meta.url)), '..', 'market-data-api.db')
 
   const db = new DatabaseSync(dbPath)
   db.exec('PRAGMA journal_mode = WAL')

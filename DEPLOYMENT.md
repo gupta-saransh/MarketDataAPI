@@ -16,7 +16,7 @@ The database backend is chosen by **one env var**:
 
 | `DATABASE_URL` | Backend used        | Where            |
 |----------------|---------------------|------------------|
-| _unset_        | SQLite (`./mfapi.db`) | local dev      |
+| _unset_        | SQLite (`./market-data-api.db`) | local dev      |
 | set            | Postgres (`pg`)     | production / Vercel |
 
 Nothing else changes between SQLite and Supabase.
