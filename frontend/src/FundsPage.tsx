@@ -79,6 +79,62 @@ function avatarColor(s: string): string {
   return AVATAR_COLORS[h % AVATAR_COLORS.length]
 }
 
+// AMC name fragment -> official domain, for logo lookup. Ordered most-specific
+// first; an unmapped fund house falls back to the coloured initial. To swap to
+// crisp self-hosted logos later, change logoUrl() to `/amc/<slug>.png`.
+const AMC_DOMAINS: [string, string][] = [
+  ['aditya birla', 'adityabirlacapital.com'],
+  ['sbi', 'sbimf.com'],
+  ['hdfc', 'hdfcfund.com'],
+  ['icici', 'icicipruamc.com'],
+  ['axis', 'axismf.com'],
+  ['nippon', 'nipponindiamf.com'],
+  ['kotak', 'kotakmf.com'],
+  ['uti', 'utimf.com'],
+  ['dsp', 'dspim.com'],
+  ['mirae', 'miraeassetmf.co.in'],
+  ['tata', 'tatamutualfund.com'],
+  ['franklin', 'franklintempletonindia.com'],
+  ['edelweiss', 'edelweissmf.com'],
+  ['bandhan', 'bandhanmutual.com'],
+  ['parag parikh', 'amc.ppfas.com'],
+  ['ppfas', 'amc.ppfas.com'],
+  ['motilal', 'motilaloswalmf.com'],
+  ['quantum', 'quantumamc.com'],
+  ['quant ', 'quantmutual.com'],
+  ['invesco', 'invescomutualfund.com'],
+  ['canara', 'canararobeco.com'],
+  ['sundaram', 'sundarammutual.com'],
+  ['baroda', 'barodabnpparibasmf.in'],
+  ['hsbc', 'assetmanagement.hsbc.co.in'],
+  ['lic', 'licmf.com'],
+  ['pgim', 'pgimindiamf.com'],
+  ['union', 'unionmf.com'],
+  ['jm financial', 'jmfinancialmf.com'],
+  ['mahindra', 'mahindramanulife.com'],
+  ['navi', 'navimutualfund.com'],
+  ['whiteoak', 'whiteoakamc.com'],
+  ['bajaj', 'bajajamc.com'],
+  ['360', '360.one'],
+  ['samco', 'samcomf.com'],
+  ['trust', 'trustmf.com'],
+  ['helios', 'helioscapital.in'],
+  ['zerodha', 'zerodhafundhouse.com'],
+  ['groww', 'growwmf.in'],
+  ['taurus', 'taurusmutualfund.com'],
+  ['shriram', 'shriramamc.com'],
+  ['nj ', 'njmutualfund.com'],
+  ['iti ', 'itimf.com'],
+]
+
+function amcDomain(name: string): string | null {
+  const k = ` ${name.toLowerCase()} `
+  for (const [frag, domain] of AMC_DOMAINS) if (k.includes(frag)) return domain
+  return null
+}
+
+const logoUrl = (domain: string) => `https://www.google.com/s2/favicons?domain=${domain}&sz=128`
+
 // ── page ──────────────────────────────────────────────────────
 export default function FundsPage() {
   const [query, setQuery] = useState('')
@@ -146,7 +202,6 @@ export default function FundsPage() {
     : null
 
   const chips = [detail?.broad_category, detail?.category, riskLabel(riskFull?.vol)].filter(Boolean) as string[]
-  const avatarText = (detail?.fund_house ?? detail?.scheme_name ?? '?').trim().charAt(0).toUpperCase()
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -208,9 +263,7 @@ export default function FundsPage() {
               <>
                 {/* Header */}
                 <div className="flex items-start gap-4">
-                  <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl text-lg font-bold text-white ${avatarColor(detail.fund_house ?? detail.scheme_name)}`}>
-                    {avatarText}
-                  </div>
+                  <Avatar key={detail.fund_house ?? detail.scheme_name} name={detail.fund_house ?? detail.scheme_name} />
                   <div className="min-w-0 flex-1">
                     <h1 className="text-xl font-semibold leading-snug tracking-tight text-slate-900">
                       {detail.scheme_name}
@@ -301,6 +354,29 @@ export default function FundsPage() {
           </div>
         )}
       </main>
+    </div>
+  )
+}
+
+// Fund-house logo. Tries the self-hosted file first, then the favicon CDN, then
+// a coloured-initial fallback. Reset per fund via a `key` so state doesn't stick.
+function Avatar({ name }: { name: string }) {
+  const [i, setI] = useState(0)
+  const domain = amcDomain(name)
+  const sources = domain ? [`/amc/${domain}.png`, logoUrl(domain)] : []
+  if (sources[i]) {
+    return (
+      <img
+        src={sources[i]}
+        alt={name}
+        onError={() => setI((v) => v + 1)}
+        className="h-12 w-12 shrink-0 rounded-xl border border-slate-200 bg-white object-contain p-2"
+      />
+    )
+  }
+  return (
+    <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl text-lg font-bold text-white ${avatarColor(name)}`}>
+      {name.trim().charAt(0).toUpperCase()}
     </div>
   )
 }

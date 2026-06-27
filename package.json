@@ -2,6 +2,7 @@
   "private": true,
   "license": "Apache-2.0",
   "scripts": {
-    "vercel-build": "cd frontend && npm install && npm run build"
+    "vercel-build": "cd frontend && npm install && npm run build",
+    "fetch:logos": "node scripts/fetch-amc-logos.mjs"
   }
 }
