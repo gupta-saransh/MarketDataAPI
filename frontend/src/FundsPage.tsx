@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { API_BASE } from './lib/api'
-import NavChart, { type NavPoint } from './components/NavChart'
+import NavChart from './components/NavChart'
+import type { NavPoint, SchemeDetail, Period, ReturnsResp, Risk, SearchRow } from './types'
 
 // ── ranges ────────────────────────────────────────────────────
 type Range = '1M' | '6M' | '1Y' | '3Y' | 'All'
@@ -8,27 +9,6 @@ const RANGES: Range[] = ['1M', '6M', '1Y', '3Y', 'All']
 const RANGE_MONTHS: Record<Exclude<Range, 'All'>, number> = { '1M': 1, '6M': 6, '1Y': 12, '3Y': 36 }
 // Map a chart range to the matching key in the /returns payload.
 const RANGE_KEY: Record<Range, string> = { '1M': '1M', '6M': '6M', '1Y': '1Y', '3Y': '3Y', All: 'inception' }
-
-// ── API shapes (only the fields we read) ──────────────────────
-interface SchemeDetail {
-  scheme_code: string | number
-  scheme_name: string
-  isin_growth: string | null
-  fund_house: string | null
-  category: string | null
-  broad_category: string | null
-  nav: number | null
-  nav_date: string | null
-}
-interface Period { return_pct: number; annualized: boolean }
-interface ReturnsResp { as_of: string; latest_nav: number; returns: Record<string, Period | null> }
-interface Risk { vol: number; maxDD: number; cagr: number; sharpe: number | null }
-interface SearchRow {
-  scheme_code: string | number
-  scheme_name: string
-  fund_house: string | null
-  category: string | null
-}
 
 // ── helpers ───────────────────────────────────────────────────
 async function getJson<T>(path: string): Promise<T> {
@@ -67,9 +47,9 @@ function rangeReturn(slice: NavPoint[]): Period | null {
   return { return_pct: (b / a - 1) * 100, annualized: false }
 }
 
-const RISK_FREE = 6 // % — for the Sharpe ratio
+const RISK_FREE = 6 // %, for the Sharpe ratio
 
-// Annualised volatility, max drawdown, CAGR and Sharpe over a slice — computed
+// Annualised volatility, max drawdown, CAGR and Sharpe over a slice, computed
 // client-side (same formulas as the API's finance.js) so they track the
 // selected chart range. The /risk endpoint only covers the whole history.
 function computeRisk(slice: NavPoint[]): Risk | null {
@@ -201,7 +181,7 @@ export default function FundsPage() {
                     className="block w-full px-4 py-2 text-left hover:bg-slate-50"
                   >
                     <div className="text-sm text-slate-800">{r.scheme_name}</div>
-                    <div className="text-xs text-slate-400">{r.fund_house ?? '—'} · {r.category ?? '—'}</div>
+                    <div className="text-xs text-slate-400">{r.fund_house ?? 'n/a'} · {r.category ?? 'n/a'}</div>
                   </button>
                 </li>
               ))}
@@ -247,7 +227,7 @@ export default function FundsPage() {
                 <div className="mt-6">
                   <div className="flex items-baseline gap-2">
                     <span className={`text-3xl font-bold ${upClass(headline?.return_pct ?? 0)}`}>
-                      {headline ? signed(headline.return_pct) : '—'}
+                      {headline ? signed(headline.return_pct) : 'n/a'}
                     </span>
                     <span className="text-sm text-slate-400">{headlineLabel}</span>
                   </div>
@@ -276,18 +256,45 @@ export default function FundsPage() {
 
                 {/* Stat tiles */}
                 <div className="mt-6 grid grid-cols-2 gap-x-6 gap-y-5 border-t border-slate-100 pt-6 sm:grid-cols-3">
-                  <Stat label={`NAV · ${detail.nav_date ?? '—'}`} value={detail.nav != null ? `₹${inr(detail.nav)}` : '—'} />
-                  <Stat label="1Y return" value={ret?.returns?.['1Y'] ? signed(ret.returns['1Y'].return_pct) : '—'} tone={ret?.returns?.['1Y']?.return_pct} />
-                  <Stat label="3Y return (CAGR)" value={ret?.returns?.['3Y'] ? signed(ret.returns['3Y'].return_pct) : '—'} tone={ret?.returns?.['3Y']?.return_pct} />
-                  <Stat label={`Volatility (ann.) · ${range}`} value={riskRange ? `${riskRange.vol.toFixed(2)}%` : '—'} />
-                  <Stat label={`Max drawdown · ${range}`} value={riskRange ? `-${riskRange.maxDD.toFixed(2)}%` : '—'} tone={-1} />
-                  <Stat label={`Sharpe ratio · ${range}`} value={riskRange?.sharpe != null ? riskRange.sharpe.toFixed(2) : '—'} />
+                  <Stat
+                    label={`NAV · ${detail.nav_date ?? 'n/a'}`}
+                    value={detail.nav != null ? `₹${inr(detail.nav)}` : 'n/a'}
+                    hint="The fund's price for one unit on this date. You buy and sell units at this price."
+                  />
+                  <Stat
+                    label="1Y return"
+                    value={ret?.returns?.['1Y'] ? signed(ret.returns['1Y'].return_pct) : 'n/a'}
+                    tone={ret?.returns?.['1Y']?.return_pct}
+                    hint="How much the fund grew over the last 1 year. +10% means ₹100 would have become ₹110."
+                  />
+                  <Stat
+                    label="3Y return (CAGR)"
+                    value={ret?.returns?.['3Y'] ? signed(ret.returns['3Y'].return_pct) : 'n/a'}
+                    tone={ret?.returns?.['3Y']?.return_pct}
+                    hint="Average growth per year over 3 years. +15% means it grew about 15% each year on average."
+                  />
+                  <Stat
+                    label={`Volatility (ann.) · ${range}`}
+                    value={riskRange ? `${riskRange.vol.toFixed(2)}%` : 'n/a'}
+                    hint="How bumpy the ride is. Around 13% means a typical year's return usually stays within about 13% above or below its average. Higher means bigger swings."
+                  />
+                  <Stat
+                    label={`Max drawdown · ${range}`}
+                    value={riskRange ? `-${riskRange.maxDD.toFixed(2)}%` : 'n/a'}
+                    tone={-1}
+                    hint="The worst fall from a high point to a low point. -13% means ₹100 once dropped to ₹87 before recovering. Recovering a 13% fall needs about a 15% gain."
+                  />
+                  <Stat
+                    label={`Sharpe ratio · ${range}`}
+                    value={riskRange?.sharpe != null ? riskRange.sharpe.toFixed(2) : 'n/a'}
+                    hint="Reward for the risk taken. Below 1 is okay, around 1 is good, above 2 is excellent. It asks whether the bumpiness was worth the returns."
+                  />
                 </div>
 
-                <p className="mt-6 text-xs text-slate-400">
-                  1Y / 3Y returns are fixed trailing periods (annualised &gt; 1Y). Volatility, max drawdown
-                  &amp; Sharpe are computed over the selected range ({range}) — short ranges are noisier.
-                  Data from AMFI via the Market Data API — not investment advice.
+                <p className="mt-6 text-xs leading-relaxed text-slate-400">
+                  1Y and 3Y returns are fixed trailing periods (annualised above 1Y). Volatility, max
+                  drawdown and Sharpe are computed over the selected range ({range}); shorter ranges are
+                  noisier. Data from AMFI via the Market Data API. Not investment advice.
                 </p>
               </>
             )}
@@ -298,11 +305,27 @@ export default function FundsPage() {
   )
 }
 
-function Stat({ label, value, tone }: { label: string; value: string; tone?: number | null }) {
+function Stat({ label, value, tone, hint }: { label: string; value: string; tone?: number | null; hint?: string }) {
   const color = tone == null ? 'text-slate-900' : tone >= 0 ? 'text-emerald-600' : 'text-red-600'
   return (
     <div>
-      <div className="text-xs text-slate-500">{label}</div>
+      <div className="flex items-center gap-1 text-xs text-slate-500">
+        <span>{label}</span>
+        {hint && (
+          <span className="group relative inline-flex">
+            <span
+              tabIndex={0}
+              aria-label={hint}
+              className="flex h-3.5 w-3.5 cursor-help items-center justify-center rounded-full border border-slate-300 text-[9px] font-semibold leading-none text-slate-400"
+            >
+              i
+            </span>
+            <span className="pointer-events-none absolute bottom-full left-1/2 z-20 mb-2 hidden w-52 -translate-x-1/2 rounded-lg bg-slate-900 px-3 py-2 text-xs font-normal leading-relaxed text-white shadow-lg group-hover:block group-focus-within:block">
+              {hint}
+            </span>
+          </span>
+        )}
+      </div>
       <div className={`mt-1 text-base font-semibold ${color}`}>{value}</div>
     </div>
   )

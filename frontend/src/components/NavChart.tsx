@@ -1,27 +1,38 @@
-import { useId, useState } from 'react'
-
-export interface NavPoint {
-  nav_date: string
-  nav: number
-}
+import { useEffect, useId, useRef, useState } from 'react'
+import type { NavPoint } from '../types'
 
 const Y_TICKS = 5
 const X_TICKS = 5
 
+const fmtSigned = (v: number, d = 2) => `${v >= 0 ? '+' : ''}${v.toFixed(d)}`
+
 /**
- * Dependency-free NAV line chart with axis scales.
+ * Dependency-free NAV line chart with axis scales, hover readout, and
+ * click-drag range selection.
  *
  * The line + gridlines live in an SVG (0–100 viewBox, stretched via
- * preserveAspectRatio="none" + non-scaling strokes). Axis labels are HTML —
- * y-values in a left gutter, dates in a bottom row — so text stays crisp and
- * undistorted, and the gutter/plot share a flex row so gridlines line up with
- * their labels. Line is green when the range closes up, red when down.
+ * preserveAspectRatio="none" + non-scaling strokes). Axis labels are HTML
+ * (y-values in a left gutter, dates in a bottom row) so text stays crisp.
+ *
+ * Interactions:
+ *   • hover  → crosshair + single-point NAV tooltip
+ *   • drag   → shades the swept band and shows the absolute + % change between
+ *              the two endpoints. Persists until you move again; clears on leave.
  */
 export default function NavChart({ points, height = 288 }: { points: NavPoint[]; height?: number }) {
   const gradId = useId()
   const [hover, setHover] = useState<number | null>(null)
+  const [sel, setSel] = useState<{ a: number; b: number } | null>(null)
+  const dragging = useRef(false)
+  const anchor = useRef(0)
 
-  if (points.length < 2) {
+  const n = points.length
+  const firstDate = points[0]?.nav_date
+
+  // Reset interaction state when the underlying slice changes (e.g. range toggle).
+  useEffect(() => { setSel(null); setHover(null) }, [n, firstDate])
+
+  if (n < 2) {
     return (
       <div style={{ height }} className="flex items-center justify-center text-sm text-slate-400">
         Not enough data to chart this range.
@@ -29,7 +40,6 @@ export default function NavChart({ points, height = 288 }: { points: NavPoint[];
     )
   }
 
-  const n = points.length
   const navs = points.map((p) => p.nav)
   const min = Math.min(...navs)
   const max = Math.max(...navs)
@@ -48,8 +58,8 @@ export default function NavChart({ points, height = 288 }: { points: NavPoint[];
   const yTicks = Array.from({ length: Y_TICKS }, (_, k) => min + (span * k) / (Y_TICKS - 1))
   const xIdx = Array.from({ length: X_TICKS }, (_, k) => Math.round(((n - 1) * k) / (X_TICKS - 1)))
 
-  const fmtY = (v: number) =>
-    v >= 1000 ? Math.round(v).toLocaleString('en-IN') : v.toFixed(1)
+  const fmtY = (v: number) => (v >= 1000 ? Math.round(v).toLocaleString('en-IN') : v.toFixed(1))
+  const fmtNav = (v: number) => v.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
   const spanDays = (Date.parse(points[n - 1].nav_date) - Date.parse(points[0].nav_date)) / 864e5
   const fmtX = (d: string) => {
@@ -58,16 +68,52 @@ export default function NavChart({ points, height = 288 }: { points: NavPoint[];
     return spanDays <= 120 ? `${dt.getUTCDate()} ${mon}` : `${mon} '${String(dt.getUTCFullYear()).slice(2)}`
   }
 
-  const onMove = (e: React.MouseEvent<HTMLDivElement>) => {
+  // ── pointer interaction ──────────────────────────────────────
+  const idxAt = (e: React.MouseEvent<HTMLDivElement>) => {
     const rect = e.currentTarget.getBoundingClientRect()
     const r = (e.clientX - rect.left) / rect.width
-    setHover(Math.max(0, Math.min(n - 1, Math.round(r * (n - 1)))))
+    return Math.max(0, Math.min(n - 1, Math.round(r * (n - 1))))
+  }
+  const onDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    const i = idxAt(e)
+    anchor.current = i
+    dragging.current = true
+    setSel({ a: i, b: i })
+    setHover(null)
+  }
+  const onMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    const i = idxAt(e)
+    if (dragging.current) {
+      setSel({ a: Math.min(anchor.current, i), b: Math.max(anchor.current, i) })
+    } else {
+      if (sel) setSel(null)
+      setHover(i)
+    }
+  }
+  const onUp = () => {
+    dragging.current = false
+    setSel((s) => (s && s.a === s.b ? null : s)) // a plain click (no drag) clears
+  }
+  const onLeave = () => {
+    dragging.current = false
+    setHover(null)
+    setSel(null)
   }
 
-  const hp = hover != null ? points[hover] : null
+  const selActive = sel != null && sel.b > sel.a && sel.b < n
+  const lo = sel?.a ?? 0
+  const hi = sel?.b ?? 0
+  const startNav = points[lo]?.nav ?? 0
+  const endNav = points[hi]?.nav ?? 0
+  const selChg = endNav - startNav
+  const selPct = startNav ? (endNav / startNav - 1) * 100 : 0
+  const selColor = selPct >= 0 ? '#10b981' : '#ef4444'
+
+  const hp = !selActive && hover != null ? points[hover] : null
 
   return (
-    <div style={{ height }} className="flex flex-col">
+    <div style={{ height }} className="flex select-none flex-col">
       {/* chart row: y-axis gutter + plot */}
       <div className="flex min-h-0 flex-1">
         {/* y-axis labels */}
@@ -84,7 +130,13 @@ export default function NavChart({ points, height = 288 }: { points: NavPoint[];
         </div>
 
         {/* plot */}
-        <div className="relative min-h-0 flex-1" onMouseMove={onMove} onMouseLeave={() => setHover(null)}>
+        <div
+          className="relative min-h-0 flex-1 cursor-crosshair"
+          onMouseMove={onMove}
+          onMouseLeave={onLeave}
+          onMouseDown={onDown}
+          onMouseUp={onUp}
+        >
           <svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none" className="overflow-visible">
             <defs>
               <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
@@ -95,16 +147,7 @@ export default function NavChart({ points, height = 288 }: { points: NavPoint[];
 
             {/* horizontal gridlines */}
             {yTicks.map((v, k) => (
-              <line
-                key={k}
-                x1={0}
-                y1={y(v)}
-                x2={100}
-                y2={y(v)}
-                stroke="#e2e8f0"
-                strokeWidth={1}
-                vectorEffect="non-scaling-stroke"
-              />
+              <line key={k} x1={0} y1={y(v)} x2={100} y2={y(v)} stroke="#e2e8f0" strokeWidth={1} vectorEffect="non-scaling-stroke" />
             ))}
 
             <path d={area} fill={`url(#${gradId})`} />
@@ -117,33 +160,48 @@ export default function NavChart({ points, height = 288 }: { points: NavPoint[];
               strokeLinejoin="round"
               strokeLinecap="round"
             />
+
+            {/* drag selection band */}
+            {selActive && (
+              <>
+                <rect x={x(lo)} y={0} width={x(hi) - x(lo)} height={100} fill={selColor} fillOpacity={0.12} />
+                <line x1={x(lo)} y1={0} x2={x(lo)} y2={100} stroke="#94a3b8" strokeWidth={1} strokeDasharray="3 3" vectorEffect="non-scaling-stroke" />
+                <line x1={x(hi)} y1={0} x2={x(hi)} y2={100} stroke="#94a3b8" strokeWidth={1} strokeDasharray="3 3" vectorEffect="non-scaling-stroke" />
+              </>
+            )}
+
+            {/* hover crosshair */}
             {hp && (
-              <line
-                x1={x(hover as number)}
-                y1={0}
-                x2={x(hover as number)}
-                y2={100}
-                stroke="#94a3b8"
-                strokeWidth={1}
-                strokeDasharray="3 3"
-                vectorEffect="non-scaling-stroke"
-              />
+              <line x1={x(hover as number)} y1={0} x2={x(hover as number)} y2={100} stroke="#94a3b8" strokeWidth={1} strokeDasharray="3 3" vectorEffect="non-scaling-stroke" />
             )}
           </svg>
 
+          {/* drag selection: endpoint dots + delta readout */}
+          {selActive && (
+            <>
+              <div className="pointer-events-none absolute h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white shadow" style={{ left: `${x(lo)}%`, top: `${y(startNav)}%`, background: selColor }} />
+              <div className="pointer-events-none absolute h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white shadow" style={{ left: `${x(hi)}%`, top: `${y(endNav)}%`, background: selColor }} />
+              <div
+                className="pointer-events-none absolute top-0 z-10 -translate-x-1/2 whitespace-nowrap rounded-md bg-slate-900 px-2.5 py-1 text-xs shadow-lg"
+                style={{ left: `${Math.min(82, Math.max(18, (x(lo) + x(hi)) / 2))}%` }}
+              >
+                <span className="font-semibold" style={{ color: selColor }}>
+                  ₹{fmtSigned(selChg)} ({fmtSigned(selPct)}%)
+                </span>
+                <span className="ml-1.5 text-slate-300">{points[lo].nav_date} → {points[hi].nav_date}</span>
+              </div>
+            </>
+          )}
+
+          {/* hover: single-point dot + tooltip */}
           {hp && (
             <>
-              <div
-                className="pointer-events-none absolute h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white shadow"
-                style={{ left: `${x(hover as number)}%`, top: `${y(hp.nav)}%`, background: color }}
-              />
+              <div className="pointer-events-none absolute h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white shadow" style={{ left: `${x(hover as number)}%`, top: `${y(hp.nav)}%`, background: color }} />
               <div
                 className="pointer-events-none absolute z-10 -translate-x-1/2 -translate-y-full whitespace-nowrap rounded-md bg-slate-900 px-2 py-1 text-xs text-white shadow-lg"
                 style={{ left: `${Math.min(90, Math.max(10, x(hover as number)))}%`, top: `${Math.max(10, y(hp.nav) - 4)}%` }}
               >
-                <div className="font-semibold">
-                  ₹{hp.nav.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                </div>
+                <div className="font-semibold">₹{fmtNav(hp.nav)}</div>
                 <div className="text-slate-300">{hp.nav_date}</div>
               </div>
             </>

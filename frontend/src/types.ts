@@ -1,4 +1,4 @@
-// Minimal OpenAPI 3.x shapes — only the parts this explorer reads.
+// Minimal OpenAPI 3.x shapes (only the parts this explorer reads).
 
 export interface OpenApiParam {
   name: string
@@ -49,4 +49,50 @@ export interface ApiResult {
   body: unknown
   rawText: string
   error?: string
+}
+
+// ── Fund / NAV domain types (used by the Fund Visualizer) ─────
+// Only the fields the UI reads. scheme_code is string | number because
+// CockroachDB returns integers as strings while SQLite returns numbers.
+
+export interface NavPoint {
+  nav_date: string
+  nav: number
+}
+
+export interface SchemeDetail {
+  scheme_code: string | number
+  scheme_name: string
+  isin_growth: string | null
+  fund_house: string | null
+  category: string | null
+  broad_category: string | null
+  nav: number | null
+  nav_date: string | null
+}
+
+export interface Period {
+  return_pct: number
+  annualized: boolean
+}
+
+export interface ReturnsResp {
+  as_of: string
+  latest_nav: number
+  returns: Record<string, Period | null>
+}
+
+// Risk metrics computed client-side from a NAV slice.
+export interface Risk {
+  vol: number
+  maxDD: number
+  cagr: number
+  sharpe: number | null
+}
+
+export interface SearchRow {
+  scheme_code: string | number
+  scheme_name: string
+  fund_house: string | null
+  category: string | null
 }
