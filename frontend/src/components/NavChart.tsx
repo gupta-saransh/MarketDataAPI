@@ -19,7 +19,15 @@ const fmtSigned = (v: number, d = 2) => `${v >= 0 ? '+' : ''}${v.toFixed(d)}`
  *   • drag   → shades the swept band and shows the absolute + % change between
  *              the two endpoints. Persists until you move again; clears on leave.
  */
-export default function NavChart({ points, height = 288 }: { points: NavPoint[]; height?: number }) {
+export default function NavChart({ points, points2, rebased = false, height = 288 }: {
+  points: NavPoint[]
+  // Optional second series for fund comparison. Must be index-aligned with
+  // `points` (same dates); FundsPage intersects the two by date before passing.
+  points2?: NavPoint[]
+  // Rebased-to-100 mode: values are index levels, not rupees.
+  rebased?: boolean
+  height?: number
+}) {
   const gradId = useId()
   const [hover, setHover] = useState<number | null>(null)
   const [sel, setSel] = useState<{ a: number; b: number } | null>(null)
@@ -28,9 +36,10 @@ export default function NavChart({ points, height = 288 }: { points: NavPoint[];
 
   const n = points.length
   const firstDate = points[0]?.nav_date
+  const comparing = points2 != null && points2.length === n
 
   // Reset interaction state when the underlying slice changes (e.g. range toggle).
-  useEffect(() => { setSel(null); setHover(null) }, [n, firstDate])
+  useEffect(() => { setSel(null); setHover(null) }, [n, firstDate, comparing])
 
   if (n < 2) {
     return (
@@ -41,23 +50,30 @@ export default function NavChart({ points, height = 288 }: { points: NavPoint[];
   }
 
   const navs = points.map((p) => p.nav)
-  const min = Math.min(...navs)
-  const max = Math.max(...navs)
+  const allVals = comparing ? navs.concat(points2!.map((p) => p.nav)) : navs
+  const min = Math.min(...allVals)
+  const max = Math.max(...allVals)
   const span = max - min || 1
 
   const x = (i: number) => (i / (n - 1)) * 100
   const y = (v: number) => 5 + (1 - (v - min) / span) * 90 // 5–95, vertical padding
 
   const up = points[n - 1].nav >= points[0].nav
-  const color = up ? '#10b981' : '#ef4444' // emerald-500 / red-500
+  // Two-line mode uses fixed colors so each fund keeps a stable identity.
+  const color = comparing ? '#10b981' : up ? '#10b981' : '#ef4444' // emerald-500 / red-500
+  const color2 = '#6366f1' // indigo-500
 
   const line = points.map((p, i) => `${i === 0 ? 'M' : 'L'}${x(i).toFixed(2)} ${y(p.nav).toFixed(2)}`).join(' ')
   const area = `${line} L100 100 L0 100 Z`
+  const line2 = comparing
+    ? points2!.map((p, i) => `${i === 0 ? 'M' : 'L'}${x(i).toFixed(2)} ${y(p.nav).toFixed(2)}`).join(' ')
+    : null
 
   // Axis ticks
   const yTicks = Array.from({ length: Y_TICKS }, (_, k) => min + (span * k) / (Y_TICKS - 1))
   const xIdx = Array.from({ length: X_TICKS }, (_, k) => Math.round(((n - 1) * k) / (X_TICKS - 1)))
 
+  const rupee = rebased ? '' : '₹'
   const fmtY = (v: number) => (v >= 1000 ? Math.round(v).toLocaleString('en-IN') : v.toFixed(1))
   const fmtNav = (v: number) => v.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
@@ -76,6 +92,7 @@ export default function NavChart({ points, height = 288 }: { points: NavPoint[];
   }
   const onDown = (e: React.MouseEvent<HTMLDivElement>) => {
     e.preventDefault()
+    if (comparing) return // drag deltas are single-fund; hover covers compare mode
     const i = idxAt(e)
     anchor.current = i
     dragging.current = true
@@ -124,7 +141,7 @@ export default function NavChart({ points, height = 288 }: { points: NavPoint[];
               className="absolute right-1.5 -translate-y-1/2 text-[10px] tabular-nums text-slate-400"
               style={{ top: `${y(v)}%` }}
             >
-              ₹{fmtY(v)}
+              {rupee}{fmtY(v)}
             </div>
           ))}
         </div>
@@ -150,7 +167,7 @@ export default function NavChart({ points, height = 288 }: { points: NavPoint[];
               <line key={k} x1={0} y1={y(v)} x2={100} y2={y(v)} stroke="#e2e8f0" strokeWidth={1} vectorEffect="non-scaling-stroke" />
             ))}
 
-            <path d={area} fill={`url(#${gradId})`} />
+            {!comparing && <path d={area} fill={`url(#${gradId})`} />}
             <path
               d={line}
               fill="none"
@@ -160,6 +177,17 @@ export default function NavChart({ points, height = 288 }: { points: NavPoint[];
               strokeLinejoin="round"
               strokeLinecap="round"
             />
+            {line2 && (
+              <path
+                d={line2}
+                fill="none"
+                stroke={color2}
+                strokeWidth={1.75}
+                vectorEffect="non-scaling-stroke"
+                strokeLinejoin="round"
+                strokeLinecap="round"
+              />
+            )}
 
             {/* drag selection band */}
             {selActive && (
@@ -186,22 +214,28 @@ export default function NavChart({ points, height = 288 }: { points: NavPoint[];
                 style={{ left: `${Math.min(82, Math.max(18, (x(lo) + x(hi)) / 2))}%` }}
               >
                 <span className="font-semibold" style={{ color: selColor }}>
-                  ₹{fmtSigned(selChg)} ({fmtSigned(selPct)}%)
+                  {rupee}{fmtSigned(selChg)} ({fmtSigned(selPct)}%)
                 </span>
                 <span className="ml-1.5 text-slate-300">{points[lo].nav_date} → {points[hi].nav_date}</span>
               </div>
             </>
           )}
 
-          {/* hover: single-point dot + tooltip */}
+          {/* hover: point dot(s) + tooltip */}
           {hp && (
             <>
               <div className="pointer-events-none absolute h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white shadow" style={{ left: `${x(hover as number)}%`, top: `${y(hp.nav)}%`, background: color }} />
+              {comparing && (
+                <div className="pointer-events-none absolute h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white shadow" style={{ left: `${x(hover as number)}%`, top: `${y(points2![hover as number].nav)}%`, background: color2 }} />
+              )}
               <div
                 className="pointer-events-none absolute z-10 -translate-x-1/2 -translate-y-full whitespace-nowrap rounded-md bg-slate-900 px-2 py-1 text-xs text-white shadow-lg"
                 style={{ left: `${Math.min(90, Math.max(10, x(hover as number)))}%`, top: `${Math.max(10, y(hp.nav) - 4)}%` }}
               >
-                <div className="font-semibold">₹{fmtNav(hp.nav)}</div>
+                <div className="font-semibold" style={comparing ? { color } : undefined}>{rupee}{fmtNav(hp.nav)}</div>
+                {comparing && (
+                  <div className="font-semibold" style={{ color: color2 }}>{rupee}{fmtNav(points2![hover as number].nav)}</div>
+                )}
                 <div className="text-slate-300">{hp.nav_date}</div>
               </div>
             </>

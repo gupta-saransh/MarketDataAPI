@@ -7,3 +7,9 @@ html { scroll-behavior: smooth; }
 body {
   @apply bg-slate-50 text-slate-800 antialiased;
 }
+
+/* Used via Tailwind's arbitrary animate value: animate-[fadeIn_.25s_ease] */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}

@@ -243,6 +243,37 @@ export const openapi = {
       },
     },
 
+    '/nav/latest': {
+      get: {
+        tags: ['Schemes'],
+        summary: 'Batch latest NAVs',
+        description:
+          'Latest NAV for up to 100 schemes in a single call. Pass scheme codes as a '
+          + 'comma-separated list. Unknown codes are omitted from the result (no error). '
+          + 'Built for portfolio widgets and spreadsheet range formulas.',
+        parameters: [
+          { name: 'codes', in: 'query', required: true, description: 'Comma-separated scheme codes (max 100)', schema: { type: 'string' }, example: '101762,118778' },
+        ],
+        responses: {
+          200: {
+            description: 'Latest NAV per known scheme code',
+            content: {
+              'application/json': {
+                example: {
+                  count: 2,
+                  data: [
+                    { scheme_code: 101762, scheme_name: 'HDFC Flexi Cap Fund - Growth Plan', nav_date: '2026-06-20', nav: 2000.152 },
+                    { scheme_code: 118778, scheme_name: 'HDFC Top 100 Fund - Growth Option - Direct Plan', nav_date: '2026-06-20', nav: 1216.53 },
+                  ],
+                },
+              },
+            },
+          },
+          400: { description: 'Missing or oversized codes list', content: { 'application/json': { example: { error: 'Provide codes as a comma-separated list, e.g. ?codes=101762,118778' } } } },
+        },
+      },
+    },
+
     '/schemes/{code}/returns': {
       get: {
         tags: ['Schemes'],

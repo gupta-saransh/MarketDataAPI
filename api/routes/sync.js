@@ -1,3 +1,4 @@
+import { createHash, timingSafeEqual } from 'node:crypto'
 import { sql } from '../db/index.js'
 
 const AMFI_URL = 'https://portal.amfiindia.com/spages/NAVAll.txt'
@@ -18,14 +19,25 @@ function batchInsertSQL(n) {
   } ON CONFLICT(scheme_code, nav_date) DO NOTHING`
 }
 
+// Constant-time bearer-token check. Hashing both sides first means the
+// comparison length never depends on the secret, so no timing signal leaks.
+function authorized(header, secret) {
+  const a = createHash('sha256').update(header ?? '').digest()
+  const b = createHash('sha256').update(`Bearer ${secret}`).digest()
+  return timingSafeEqual(a, b)
+}
+
 export default async function syncRoutes(fastify) {
   fastify.post('/sync-nav', async (req, reply) => {
     const secret = process.env.SYNC_NAV_SECRET
-    if (secret) {
-      const auth = req.headers['authorization'] ?? ''
-      if (auth !== `Bearer ${secret}`) {
-        return reply.code(401).send({ error: 'Unauthorized' })
-      }
+    // Fail closed: an unset secret disables the endpoint entirely (this is a
+    // write endpoint; running it unauthenticated is never intended in prod).
+    // Local dev without a secret should set one in api/.env.
+    if (!secret) {
+      return reply.code(503).send({ error: 'Sync disabled: SYNC_NAV_SECRET is not configured' })
+    }
+    if (!authorized(req.headers['authorization'], secret)) {
+      return reply.code(401).send({ error: 'Unauthorized' })
     }
 
     const res = await fetch(AMFI_URL)

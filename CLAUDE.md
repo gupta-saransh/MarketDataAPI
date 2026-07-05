@@ -175,7 +175,9 @@ These three hardening layers live in `app.js` and `routes/schemes.js`:
 
 Fetches AMFI's `NAVAll.txt` (one HTTP call, ~1 MB), parses semicolon-delimited lines, filters to known `scheme_code`s, and batch-upserts in CHUNK=500 rows with `ON CONFLICT(scheme_code, nav_date) DO NOTHING`.
 
-Auth: `Authorization: Bearer <SYNC_NAV_SECRET>`. If `SYNC_NAV_SECRET` is unset, auth is disabled.
+Auth: `Authorization: Bearer <SYNC_NAV_SECRET>`. Fails closed: if `SYNC_NAV_SECRET` is unset,
+the endpoint returns 503 (never runs unauthenticated). Token comparison hashes both sides with
+sha256 and uses `crypto.timingSafeEqual` (constant-time, length-independent).
 
 Returns: `{ nav_date, parsed, inserted, skipped }`.
 
@@ -406,6 +408,10 @@ GET /schemes/:code/nav/latest
 → { scheme_code, scheme_name, nav_date, nav }
    404 → { error: 'No NAV data found' }
 
+GET /nav/latest?codes=101762,118778              ← batch (max 100 codes); routes/nav.js, top-level
+→ { count, data: [{ scheme_code, scheme_name, nav, nav_date }] }
+   400 → missing or oversized codes list; unknown codes are omitted, not errors
+
 GET /schemes/:code/returns
 → { scheme_code, scheme_name, inception_date, inception_cagr,
     returns: { 1W, 1M, 3M, 6M, 1Y, 2Y, 3Y, 5Y, max } }   ← null if insufficient history
@@ -622,6 +628,12 @@ npm run fetch:logos       # from repo root
 - **Pagination clamps** — `limit ≤ 100`, `page ≥ 1`; no unbounded result sets or negative-OFFSET 500s.
 - **Error handler** — 5xx internals hidden from clients (no SQL/schema/conn-string disclosure).
 - **Turso fully removed** — adapter, env vars, npm dependency all stripped. No dead credential surface.
+- **`/sync-nav` auth hardened** — fails closed (503) when `SYNC_NAV_SECRET` is unset; constant-time
+  token compare (sha256 both sides + `crypto.timingSafeEqual`) in routes/sync.js.
+- **Security headers** — `onSend` hook in app.js sets `X-Content-Type-Options: nosniff`,
+  `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`, a restrictive CSP, and HSTS on every response.
+- **Edge caching** — per-endpoint `Cache-Control` via `CACHE_RULES` in app.js (catalogs 24h,
+  schemes/NAV/analytics 30 min, openapi 1h; applied to GET 200s only, errors stay uncached).
 
 ### Verified safe
 - **SQL injection** — all queries use `?` placeholders bound as params, including `LIKE '%q%'` (the `%q%` is a *parameter*, not interpolated). Only string-built SQL is the batch-insert placeholder list in `sync.js`, which interpolates a row *count*, not user data.
@@ -631,7 +643,6 @@ npm run fetch:logos       # from repo root
 ### Open / accepted risks (not yet fixed)
 - **Rotate live secrets** — the CockroachDB password, `SYNC_NAV_SECRET`, and `AXIOM_TOKEN` are live in `api/.env` and were read into an AI session. Rotate all three. Old Supabase password (`Saransh_007#`) is now only in `DATABASE_URL_OLD` (dead/renamed key) — decommission Supabase project to fully retire it.
 - **DB TLS validation** — `ssl: { rejectUnauthorized: false }` in `db/index.js` accepts any cert (MITM risk). Low risk for CockroachDB Serverless in practice; correct fix is to pin the CA cert.
-- **`/sync-nav` auth** — fails *open* if `SYNC_NAV_SECRET` is unset (expensive unauthenticated write), and uses a non-constant-time `!==` compare (theoretical timing attack). Harden: fail closed in prod + `crypto.timingSafeEqual`.
 - **CORS `origin: '*'`** — accepted (public read-only API; `/sync-nav` is gated by bearer auth).
 - **Analytics PII** — raw client IPs + search terms shipped to Axiom; `x-forwarded-for` is spoofable (only pollutes analytics). Consider a retention policy.
 
@@ -642,18 +653,15 @@ npm run fetch:logos       # from repo root
 Ideas discussed, prioritized by impact vs effort:
 
 **High impact, data already supports:**
-- **Batch NAV** — `GET /nav/latest?codes=101762,118778,120503` returns many latest NAVs in one call. Useful for portfolio widgets and Google Sheets range formulas.
 - **Screener** — `GET /schemes/screen?min_return_1y=10&max_vol=15&sort=sharpe&limit=20` filters and ranks all schemes by computed metrics. Requires pre-computing or computing in-query.
 - **Benchmark comparison** — alpha and beta vs Nifty 50 (or another index scheme). Needs a reference series stored in nav_history or fetched on the fly.
 - **Portfolio endpoint** — `POST /portfolio/value` with `{ holdings: [{code, units}] }` returns current value, day change, XIRR for the portfolio.
 
 **Medium effort:**
 - **Additional ratios** — Sortino (downside-only vol), Calmar (CAGR / max drawdown), Treynor.
-- **Fund comparison overlay** — chart two schemes on the same axes, rebased to 100 at start of period.
 - **Peer ranking** — where does this fund rank in its category by 1Y/3Y return or Sharpe.
 
 **Low effort:**
-- **Cache-Control headers** — `s-maxage=1800, stale-while-revalidate=86400` on NAV and analytics routes. Free latency and DB load reduction via Vercel's edge cache.
 - **SIP goal-mode** — given a target amount and monthly SIP, compute how many months to goal.
 - **Dividend history** — parse the dividend lines from NAVAll.txt (currently ignored).
 

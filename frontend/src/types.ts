@@ -96,3 +96,39 @@ export interface SearchRow {
   fund_house: string | null
   category: string | null
 }
+
+// GET /schemes/:code/sip response.
+export interface SipResp {
+  scheme_code: string | number
+  scheme_name: string
+  frequency: string
+  sip: {
+    amount: number
+    day: number
+    from: string
+    to: string
+    installments: number
+    total_invested: number
+    units: number
+    current_value: number
+    absolute_return_pct: number
+    xirr_pct: number | null
+  }
+}
+
+// GET /schemes/:code/rolling response.
+export interface RollingResp {
+  scheme_code: string | number
+  scheme_name: string
+  window: string
+  observations: number
+  annualized: boolean
+  avg: number
+  min: number
+  max: number
+  median: number
+  beat_pct: number
+  pct_beating: number
+  best: { from: string; to: string; return_pct: number }
+  worst: { from: string; to: string; return_pct: number }
+}

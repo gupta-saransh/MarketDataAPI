@@ -19,8 +19,28 @@ import fundHousesRoutes from './routes/fund-houses.js'
 import categoriesRoutes from './routes/categories.js'
 import schemesRoutes    from './routes/schemes.js'
 import analyticsRoutes  from './routes/analytics.js'
+import navRoutes        from './routes/nav.js'
 import syncRoutes       from './routes/sync.js'
 import mcpRoutes        from './routes/mcp.js'
+
+// Per-route-prefix edge cache policy. NAV updates at most once a day (AMFI
+// publishes daily), catalogs almost never change, and search tolerates a short
+// cache, so each class gets its own TTL instead of one blanket policy.
+// s-maxage is honoured by Vercel's edge cache; clients see the same header.
+const DAY = 86400
+const CACHE_RULES = [
+  ['/fund-houses',  `public, s-maxage=${DAY}, stale-while-revalidate=${DAY}`],
+  ['/categories',   `public, s-maxage=${DAY}, stale-while-revalidate=${DAY}`],
+  ['/openapi.json', `public, s-maxage=3600, stale-while-revalidate=${DAY}`],
+  ['/nav/latest',   `public, s-maxage=1800, stale-while-revalidate=${DAY}`],
+  ['/schemes',      `public, s-maxage=1800, stale-while-revalidate=${DAY}`],
+]
+
+function cacheControlFor(url) {
+  const path = url.split('?')[0]
+  for (const [prefix, value] of CACHE_RULES) if (path.startsWith(prefix)) return value
+  return null
+}
 
 export async function build(opts = {}) {
   // trustProxy lets Fastify derive req.ip from X-Forwarded-For — required for
@@ -49,10 +69,28 @@ export async function build(opts = {}) {
     return reply.code(status).send({ error: err.message })
   })
 
+  // Security headers on every response. The API serves JSON only, so a
+  // restrictive CSP is safe; HSTS matters because the API is public HTTPS.
+  app.addHook('onSend', (req, reply, payload, done) => {
+    reply.header('X-Content-Type-Options', 'nosniff')
+    reply.header('X-Frame-Options', 'DENY')
+    reply.header('Referrer-Policy', 'no-referrer')
+    reply.header('Content-Security-Policy', "default-src 'none'; frame-ancestors 'none'")
+    reply.header('Strict-Transport-Security', 'max-age=63072000; includeSubDomains')
+
+    // Edge caching for cacheable GET responses only; errors and writes stay uncached.
+    if (req.method === 'GET' && reply.statusCode === 200) {
+      const cc = cacheControlFor(req.url)
+      if (cc) reply.header('Cache-Control', cc)
+    }
+    done(null, payload)
+  })
+
   await app.register(fundHousesRoutes, { prefix: '/fund-houses' })
   await app.register(categoriesRoutes, { prefix: '/categories' })
   await app.register(schemesRoutes,    { prefix: '/schemes' })
   await app.register(analyticsRoutes,  { prefix: '/schemes' })
+  await app.register(navRoutes)
   await app.register(syncRoutes)
   await app.register(mcpRoutes)
 

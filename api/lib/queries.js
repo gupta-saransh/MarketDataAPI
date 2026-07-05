@@ -171,6 +171,28 @@ export async function getLatestNav(code) {
   return { scheme_code: c, scheme_name: row.scheme_name, nav_date: row.nav_date, nav: row.nav }
 }
 
+// Latest NAV for up to MAX_BATCH_CODES schemes in one query. The IN-list
+// placeholders are generated from the code COUNT (never from user data), so
+// the statement stays fully parameterized.
+export const MAX_BATCH_CODES = 100
+
+export async function getLatestNavBatch(codes) {
+  const clean = [...new Set(codes.map(Number).filter(Number.isFinite))].slice(0, MAX_BATCH_CODES)
+  if (!clean.length) return []
+  const placeholders = clean.map(() => '?').join(',')
+  const rows = await sql.all(`
+    SELECT
+      s.scheme_code,
+      s.scheme_name,
+      (SELECT nav      FROM nav_history n WHERE n.scheme_code = s.scheme_code ORDER BY nav_date DESC LIMIT 1) AS nav,
+      (SELECT nav_date FROM nav_history n WHERE n.scheme_code = s.scheme_code ORDER BY nav_date DESC LIMIT 1) AS nav_date
+    FROM schemes s
+    WHERE s.scheme_code IN (${placeholders})
+    ORDER BY s.scheme_code
+  `, clean)
+  return rows
+}
+
 // ── analytics ─────────────────────────────────────────────────
 
 async function loadSeries(code) {
