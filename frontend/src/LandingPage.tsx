@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 
 const BASE = 'https://market-data-api-psi.vercel.app/api'
-const GITHUB = 'https://github.com/your-github/market-data-api'
 
 // Count-up on first render so the stats read as live data, not static copy.
 function CountUp({ to, suffix = '', duration = 900 }: { to: number; suffix?: string; duration?: number }) {
@@ -64,7 +63,6 @@ export default function LandingPage() {
           <div className="flex items-center gap-5 text-sm">
             <a href="#funds" className="text-slate-400 transition-colors hover:text-white">Fund Visualizer</a>
             <a href="#docs" className="text-slate-400 transition-colors hover:text-white">API Reference</a>
-            <a href={GITHUB} target="_blank" rel="noreferrer" className="text-slate-400 transition-colors hover:text-white">GitHub</a>
           </div>
         </div>
       </nav>
@@ -214,8 +212,8 @@ export default function LandingPage() {
           </p>
           <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
             <span>Apache 2.0 licensed</span>
-            <a href={GITHUB} target="_blank" rel="noreferrer" className="transition-colors hover:text-slate-300">Source on GitHub</a>
             <a href="#docs" className="transition-colors hover:text-slate-300">API Reference</a>
+            <a href="#funds" className="transition-colors hover:text-slate-300">Fund Visualizer</a>
             <span className="text-slate-600">Fastify + CockroachDB + Vercel</span>
           </div>
         </div>

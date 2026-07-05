@@ -164,7 +164,7 @@ export default function NavChart({ points, points2, rebased = false, height = 28
 
             {/* horizontal gridlines */}
             {yTicks.map((v, k) => (
-              <line key={k} x1={0} y1={y(v)} x2={100} y2={y(v)} stroke="#e2e8f0" strokeWidth={1} vectorEffect="non-scaling-stroke" />
+              <line key={k} x1={0} y1={y(v)} x2={100} y2={y(v)} stroke="#1e293b" strokeWidth={1} vectorEffect="non-scaling-stroke" />
             ))}
 
             {!comparing && <path d={area} fill={`url(#${gradId})`} />}
@@ -207,10 +207,10 @@ export default function NavChart({ points, points2, rebased = false, height = 28
           {/* drag selection: endpoint dots + delta readout */}
           {selActive && (
             <>
-              <div className="pointer-events-none absolute h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white shadow" style={{ left: `${x(lo)}%`, top: `${y(startNav)}%`, background: selColor }} />
-              <div className="pointer-events-none absolute h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white shadow" style={{ left: `${x(hi)}%`, top: `${y(endNav)}%`, background: selColor }} />
+              <div className="pointer-events-none absolute h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-slate-950 shadow" style={{ left: `${x(lo)}%`, top: `${y(startNav)}%`, background: selColor }} />
+              <div className="pointer-events-none absolute h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-slate-950 shadow" style={{ left: `${x(hi)}%`, top: `${y(endNav)}%`, background: selColor }} />
               <div
-                className="pointer-events-none absolute top-0 z-10 -translate-x-1/2 whitespace-nowrap rounded-md bg-slate-900 px-2.5 py-1 text-xs shadow-lg"
+                className="pointer-events-none absolute top-0 z-10 -translate-x-1/2 whitespace-nowrap rounded-md bg-slate-800 px-2.5 py-1 text-xs shadow-lg ring-1 ring-slate-700"
                 style={{ left: `${Math.min(82, Math.max(18, (x(lo) + x(hi)) / 2))}%` }}
               >
                 <span className="font-semibold" style={{ color: selColor }}>
@@ -224,12 +224,12 @@ export default function NavChart({ points, points2, rebased = false, height = 28
           {/* hover: point dot(s) + tooltip */}
           {hp && (
             <>
-              <div className="pointer-events-none absolute h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white shadow" style={{ left: `${x(hover as number)}%`, top: `${y(hp.nav)}%`, background: color }} />
+              <div className="pointer-events-none absolute h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-slate-950 shadow" style={{ left: `${x(hover as number)}%`, top: `${y(hp.nav)}%`, background: color }} />
               {comparing && (
-                <div className="pointer-events-none absolute h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white shadow" style={{ left: `${x(hover as number)}%`, top: `${y(points2![hover as number].nav)}%`, background: color2 }} />
+                <div className="pointer-events-none absolute h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-slate-950 shadow" style={{ left: `${x(hover as number)}%`, top: `${y(points2![hover as number].nav)}%`, background: color2 }} />
               )}
               <div
-                className="pointer-events-none absolute z-10 -translate-x-1/2 -translate-y-full whitespace-nowrap rounded-md bg-slate-900 px-2 py-1 text-xs text-white shadow-lg"
+                className="pointer-events-none absolute z-10 -translate-x-1/2 -translate-y-full whitespace-nowrap rounded-md bg-slate-800 px-2 py-1 text-xs text-white shadow-lg ring-1 ring-slate-700"
                 style={{ left: `${Math.min(90, Math.max(10, x(hover as number)))}%`, top: `${Math.max(10, y(hp.nav) - 4)}%` }}
               >
                 <div className="font-semibold" style={comparing ? { color } : undefined}>{rupee}{fmtNav(hp.nav)}</div>

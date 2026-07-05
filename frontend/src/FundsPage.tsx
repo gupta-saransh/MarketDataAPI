@@ -32,7 +32,7 @@ async function getJson<T>(path: string): Promise<T> {
 const inr = (n: number, d = 2) => n.toLocaleString('en-IN', { minimumFractionDigits: d, maximumFractionDigits: d })
 const inr0 = (n: number) => Math.round(n).toLocaleString('en-IN')
 const signed = (n: number) => `${n >= 0 ? '+' : ''}${n.toFixed(2)}%`
-const upClass = (n: number) => (n >= 0 ? 'text-emerald-600' : 'text-red-600')
+const upClass = (n: number) => (n >= 0 ? 'text-emerald-400' : 'text-red-400')
 
 function riskLabel(vol: number | undefined | null): string | null {
   if (vol == null) return null
@@ -242,14 +242,14 @@ export default function FundsPage() {
   const cmpEndB = cmp ? cmp.b[cmp.b.length - 1].nav - 100 : null
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen bg-slate-950">
       {/* Nav */}
-      <nav className="border-b border-slate-200 bg-white">
+      <nav className="border-b border-slate-800/80">
         <div className="mx-auto flex max-w-3xl items-center justify-between px-6 py-4">
-          <a href="#" className="font-semibold tracking-tight text-slate-900">Market Data API</a>
+          <a href="#" className="font-semibold tracking-tight text-white">Market Data API</a>
           <div className="flex items-center gap-4 text-sm">
-            <a href="#" className="text-slate-400 transition-colors hover:text-slate-700">Home</a>
-            <a href="#docs" className="text-slate-400 transition-colors hover:text-slate-700">API Reference</a>
+            <a href="#" className="text-slate-400 transition-colors hover:text-white">Home</a>
+            <a href="#docs" className="text-slate-400 transition-colors hover:text-white">API Reference</a>
           </div>
         </div>
       </nav>
@@ -264,19 +264,19 @@ export default function FundsPage() {
         </div>
 
         {error && (
-          <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+          <div className="rounded-xl border border-red-900 bg-red-950/50 p-4 text-sm text-red-300">
             Couldn't load this scheme ({error}). Is the API running?
           </div>
         )}
 
         {/* Card */}
         {!error && (
-          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="rounded-2xl border border-slate-800 bg-slate-900/50 p-6">
             {loading || !detail ? (
               <div className="animate-pulse space-y-4">
-                <div className="h-10 w-2/3 rounded bg-slate-100" />
-                <div className="h-8 w-1/3 rounded bg-slate-100" />
-                <div className="h-72 rounded bg-slate-100" />
+                <div className="h-10 w-2/3 rounded bg-slate-800" />
+                <div className="h-8 w-1/3 rounded bg-slate-800" />
+                <div className="h-72 rounded bg-slate-800" />
               </div>
             ) : (
               <div className="animate-[fadeIn_.25s_ease]">
@@ -284,12 +284,12 @@ export default function FundsPage() {
                 <div className="flex items-start gap-4">
                   <Avatar key={detail.fund_house ?? detail.scheme_name} name={detail.fund_house ?? detail.scheme_name} />
                   <div className="min-w-0 flex-1">
-                    <h1 className="text-xl font-semibold leading-snug tracking-tight text-slate-900">
+                    <h1 className="text-xl font-semibold leading-snug tracking-tight text-white">
                       {detail.scheme_name}
                     </h1>
                     <div className="mt-2 flex flex-wrap gap-2">
                       {chips.map((c) => (
-                        <span key={c} className="rounded-full border border-slate-200 px-2.5 py-0.5 text-xs text-slate-600">{c}</span>
+                        <span key={c} className="rounded-full border border-slate-700 px-2.5 py-0.5 text-xs text-slate-300">{c}</span>
                       ))}
                     </div>
                   </div>
@@ -313,16 +313,16 @@ export default function FundsPage() {
                 <div className="mt-4 flex flex-wrap items-center gap-2 text-xs">
                   {compare ? (
                     <>
-                      <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-emerald-700">
-                        <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                      <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-950 px-2.5 py-1 text-emerald-300">
+                        <span className="h-2 w-2 rounded-full bg-emerald-400" />
                         {detail.scheme_name.slice(0, 32)}{detail.scheme_name.length > 32 ? '…' : ''}
                         {cmpEndA != null && <b>{signed(cmpEndA)}</b>}
                       </span>
-                      <span className="inline-flex items-center gap-1.5 rounded-full bg-indigo-50 px-2.5 py-1 text-indigo-700">
-                        <span className="h-2 w-2 rounded-full bg-indigo-500" />
+                      <span className="inline-flex items-center gap-1.5 rounded-full bg-indigo-950 px-2.5 py-1 text-indigo-300">
+                        <span className="h-2 w-2 rounded-full bg-indigo-400" />
                         {compare.name.slice(0, 32)}{compare.name.length > 32 ? '…' : ''}
                         {cmpEndB != null && <b>{signed(cmpEndB)}</b>}
-                        <button onClick={() => setCompare(null)} aria-label="Remove comparison" className="ml-0.5 font-bold hover:text-indigo-900">×</button>
+                        <button onClick={() => setCompare(null)} aria-label="Remove comparison" className="ml-0.5 font-bold hover:text-indigo-100">×</button>
                       </span>
                       <span className="text-slate-400">
                         {cmp ? 'both rebased to 100 at start of range' : 'loading comparison…'}
@@ -350,7 +350,7 @@ export default function FundsPage() {
                         key={r}
                         onClick={() => setRange(r)}
                         className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-                          range === r ? 'bg-slate-900 text-white' : 'text-slate-500 hover:bg-slate-100'
+                          range === r ? 'bg-white text-slate-900' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
                         }`}
                       >
                         {r}
@@ -360,7 +360,7 @@ export default function FundsPage() {
                 </div>
 
                 {/* Stat tiles */}
-                <div className="mt-6 grid grid-cols-2 gap-x-6 gap-y-5 border-t border-slate-100 pt-6 sm:grid-cols-3">
+                <div className="mt-6 grid grid-cols-2 gap-x-6 gap-y-5 border-t border-slate-800 pt-6 sm:grid-cols-3">
                   <Stat
                     label={`NAV · ${detail.nav_date ?? 'n/a'}`}
                     value={detail.nav != null ? `₹${inr(detail.nav)}` : 'n/a'}
@@ -458,23 +458,23 @@ function SearchBox({ placeholder, onPick, small }: {
         onFocus={() => results.length && setOpen(true)}
         onBlur={() => setTimeout(() => setOpen(false), 150)}
         placeholder={placeholder}
-        className={`w-full rounded-xl border border-slate-200 bg-white text-slate-900 shadow-sm outline-none placeholder:text-slate-400 focus:border-slate-400 ${
+        className={`w-full rounded-xl border border-slate-700 bg-slate-900 text-slate-100 shadow-sm outline-none placeholder:text-slate-500 focus:border-slate-500 ${
           small ? 'px-3 py-2 text-xs' : 'px-4 py-3 text-sm'
         }`}
       />
       {searching && (
-        <span className={`absolute right-3 ${small ? 'top-2' : 'top-3.5'} h-4 w-4 animate-spin rounded-full border-2 border-slate-200 border-t-slate-500`} />
+        <span className={`absolute right-3 ${small ? 'top-2' : 'top-3.5'} h-4 w-4 animate-spin rounded-full border-2 border-slate-700 border-t-slate-300`} />
       )}
       {open && (results.length > 0 || noHits) && (
-        <ul className="absolute z-20 mt-2 max-h-80 w-full overflow-auto rounded-xl border border-slate-200 bg-white py-1 shadow-lg">
+        <ul className="absolute z-20 mt-2 max-h-80 w-full overflow-auto rounded-xl border border-slate-700 bg-slate-900 py-1 shadow-lg">
           {noHits && <li className="px-4 py-2 text-xs text-slate-400">No funds match that search.</li>}
           {results.map((r) => (
             <li key={String(r.scheme_code)}>
               <button
                 onMouseDown={(e) => { e.preventDefault(); pick(r) }}
-                className="block w-full px-4 py-2 text-left hover:bg-slate-50"
+                className="block w-full px-4 py-2 text-left hover:bg-slate-800"
               >
-                <div className="text-sm text-slate-800">{r.scheme_name}</div>
+                <div className="text-sm text-slate-100">{r.scheme_name}</div>
                 <div className="text-xs text-slate-400">{r.fund_house ?? 'n/a'} · {r.category ?? 'n/a'}</div>
               </button>
             </li>
@@ -498,7 +498,7 @@ function ShareButton({ code }: { code: string }) {
   return (
     <button
       onClick={copy}
-      className="shrink-0 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-500 transition-colors hover:border-slate-300 hover:text-slate-700"
+      className="shrink-0 rounded-lg border border-slate-700 px-3 py-1.5 text-xs font-medium text-slate-400 transition-colors hover:border-slate-500 hover:text-slate-200"
     >
       {copied ? 'Link copied ✓' : 'Share'}
     </button>
@@ -530,10 +530,10 @@ function RollingCard({ code }: { code: string }) {
   }
 
   return (
-    <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+    <div className="mt-6 rounded-2xl border border-slate-800 bg-slate-900/50 p-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-sm font-semibold text-slate-900">Rolling {win} returns</h2>
+          <h2 className="text-sm font-semibold text-white">Rolling {win} returns</h2>
           <p className="mt-0.5 text-xs text-slate-400">
             Every possible {win} holding period in this fund's history, not just the latest one.
           </p>
@@ -544,7 +544,7 @@ function RollingCard({ code }: { code: string }) {
               key={w}
               onClick={() => setWin(w)}
               className={`rounded-full px-2.5 py-1 text-xs font-medium transition-colors ${
-                win === w ? 'bg-slate-900 text-white' : 'text-slate-500 hover:bg-slate-100'
+                win === w ? 'bg-white text-slate-900' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
               }`}
             >
               {w}
@@ -553,7 +553,7 @@ function RollingCard({ code }: { code: string }) {
         </div>
       </div>
 
-      {state === 'loading' && <div className="mt-5 h-16 animate-pulse rounded bg-slate-100" />}
+      {state === 'loading' && <div className="mt-5 h-16 animate-pulse rounded bg-slate-800" />}
       {state === 'none' && (
         <p className="mt-5 text-sm text-slate-400">Not enough history for {win} rolling windows.</p>
       )}
@@ -561,21 +561,21 @@ function RollingCard({ code }: { code: string }) {
         <>
           {/* min → max track with a median marker */}
           <div className="mt-6 px-1">
-            <div className="relative h-2 rounded-full bg-gradient-to-r from-red-200 via-slate-200 to-emerald-200">
+            <div className="relative h-2 rounded-full bg-gradient-to-r from-red-500/40 via-slate-700 to-emerald-500/40">
               <span
-                className="absolute top-1/2 h-4 w-1 -translate-x-1/2 -translate-y-1/2 rounded bg-slate-900"
+                className="absolute top-1/2 h-4 w-1 -translate-x-1/2 -translate-y-1/2 rounded bg-white"
                 style={{ left: `${pos(data.median)}%` }}
                 title={`Median ${signed(data.median)}`}
               />
             </div>
             <div className="mt-2 flex justify-between text-xs">
-              <span className="text-red-600">worst {signed(data.min)}</span>
-              <span className="font-medium text-slate-700">median {signed(data.median)}</span>
-              <span className="text-emerald-600">best {signed(data.max)}</span>
+              <span className="text-red-400">worst {signed(data.min)}</span>
+              <span className="font-medium text-slate-200">median {signed(data.median)}</span>
+              <span className="text-emerald-400">best {signed(data.max)}</span>
             </div>
           </div>
 
-          <div className="mt-5 grid grid-cols-2 gap-x-6 gap-y-4 border-t border-slate-100 pt-5 sm:grid-cols-4">
+          <div className="mt-5 grid grid-cols-2 gap-x-6 gap-y-4 border-t border-slate-800 pt-5 sm:grid-cols-4">
             <Stat label="Windows measured" value={data.observations.toLocaleString('en-IN')} />
             <Stat label={`Average ${data.annualized ? '(ann.)' : ''}`} value={signed(data.avg)} tone={data.avg} />
             <Stat label={`Beat ${data.beat_pct}% p.a.`} value={`${data.pct_beating.toFixed(1)}%`} hint={`The share of all ${win} windows where the fund returned at least ${data.beat_pct}% annualised. Higher means more consistent.`} />
@@ -618,8 +618,8 @@ function SipCard({ code, schemeName }: { code: string; schemeName: string }) {
   const gain = sip ? sip.current_value - sip.total_invested : null
 
   return (
-    <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-      <h2 className="text-sm font-semibold text-slate-900">SIP calculator</h2>
+    <div className="mt-6 rounded-2xl border border-slate-800 bg-slate-900/50 p-6">
+      <h2 className="text-sm font-semibold text-white">SIP calculator</h2>
       <p className="mt-0.5 text-xs text-slate-400">
         What a monthly SIP in {schemeName} would actually have become, using real NAVs on each installment date.
       </p>
@@ -633,7 +633,7 @@ function SipCard({ code, schemeName }: { code: string; schemeName: string }) {
             step={500}
             value={amount}
             onChange={(e) => setAmount(e.target.value)}
-            className="mt-1 block w-32 rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-slate-400"
+            className="mt-1 block w-32 rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 outline-none [color-scheme:dark] focus:border-slate-500"
           />
         </label>
         <label className="text-xs text-slate-500">
@@ -642,19 +642,19 @@ function SipCard({ code, schemeName }: { code: string; schemeName: string }) {
             type="date"
             value={from}
             onChange={(e) => setFrom(e.target.value)}
-            className="mt-1 block rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-slate-400"
+            className="mt-1 block rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 outline-none [color-scheme:dark] focus:border-slate-500"
           />
         </label>
       </div>
 
-      {state === 'loading' && <div className="mt-5 h-16 animate-pulse rounded bg-slate-100" />}
+      {state === 'loading' && <div className="mt-5 h-16 animate-pulse rounded bg-slate-800" />}
       {state === 'error' && (
         <p className="mt-5 text-sm text-slate-400">
           Couldn't simulate this SIP. Try a start date within the fund's NAV history.
         </p>
       )}
       {sip && gain != null && (
-        <div className="mt-5 grid grid-cols-2 gap-x-6 gap-y-4 border-t border-slate-100 pt-5 sm:grid-cols-4">
+        <div className="mt-5 grid grid-cols-2 gap-x-6 gap-y-4 border-t border-slate-800 pt-5 sm:grid-cols-4">
           <Stat label={`Invested (${sip.installments} months)`} value={`₹${inr0(sip.total_invested)}`} />
           <Stat label={`Value on ${sip.to}`} value={`₹${inr0(sip.current_value)}`} tone={gain} />
           <Stat label="Gain" value={`${gain >= 0 ? '+' : ''}₹${inr0(gain)}`} tone={gain} />
@@ -682,7 +682,7 @@ function Avatar({ name }: { name: string }) {
         src={sources[i]}
         alt={name}
         onError={() => setI((v) => v + 1)}
-        className="h-12 w-12 shrink-0 rounded-xl border border-slate-200 bg-white object-contain p-2"
+        className="h-12 w-12 shrink-0 rounded-xl border border-slate-700 bg-white object-contain p-2"
       />
     )
   }
@@ -694,7 +694,7 @@ function Avatar({ name }: { name: string }) {
 }
 
 function Stat({ label, value, tone, hint }: { label: string; value: string; tone?: number | null; hint?: string }) {
-  const color = tone == null ? 'text-slate-900' : tone >= 0 ? 'text-emerald-600' : 'text-red-600'
+  const color = tone == null ? 'text-slate-100' : tone >= 0 ? 'text-emerald-400' : 'text-red-400'
   return (
     <div>
       <div className="flex items-center gap-1 text-xs text-slate-500">
@@ -704,11 +704,11 @@ function Stat({ label, value, tone, hint }: { label: string; value: string; tone
             <span
               tabIndex={0}
               aria-label={hint}
-              className="flex h-3.5 w-3.5 cursor-help items-center justify-center rounded-full border border-slate-300 text-[9px] font-semibold leading-none text-slate-400"
+              className="flex h-3.5 w-3.5 cursor-help items-center justify-center rounded-full border border-slate-600 text-[9px] font-semibold leading-none text-slate-400"
             >
               i
             </span>
-            <span className="pointer-events-none absolute bottom-full left-1/2 z-20 mb-2 hidden w-52 -translate-x-1/2 rounded-lg bg-slate-900 px-3 py-2 text-xs font-normal leading-relaxed text-white shadow-lg group-hover:block group-focus-within:block">
+            <span className="pointer-events-none absolute bottom-full left-1/2 z-20 mb-2 hidden w-52 -translate-x-1/2 rounded-lg bg-slate-800 px-3 py-2 text-xs font-normal leading-relaxed text-white shadow-lg ring-1 ring-slate-700 group-hover:block group-focus-within:block">
               {hint}
             </span>
           </span>

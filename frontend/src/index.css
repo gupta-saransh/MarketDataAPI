@@ -5,7 +5,7 @@
 html { scroll-behavior: smooth; }
 
 body {
-  @apply bg-slate-50 text-slate-800 antialiased;
+  @apply bg-slate-950 text-slate-100 antialiased;
 }
 
 /* Used via Tailwind's arbitrary animate value: animate-[fadeIn_.25s_ease] */

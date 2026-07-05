@@ -41,7 +41,7 @@ export default function TryItPanel({ endpoint }: { endpoint: Endpoint }) {
   }
 
   return (
-    <div className="border-t border-slate-200 bg-slate-50 px-4 py-4">
+    <div className="border-t border-slate-800 bg-slate-950/50 px-4 py-4">
       {(pathParams.length > 0 || queryParams.length > 0) && (
         <div className="space-y-4">
           {pathParams.length > 0 && (
@@ -57,17 +57,17 @@ export default function TryItPanel({ endpoint }: { endpoint: Endpoint }) {
         <button
           onClick={run}
           disabled={loading || missingRequired}
-          className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
+          className="rounded-md bg-emerald-500 px-4 py-2 text-sm font-medium text-slate-950 hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-40"
         >
           {loading ? 'Running…' : 'Run ▶'}
         </button>
-        <code className="min-w-0 flex-1 truncate rounded bg-white px-3 py-2 font-mono text-xs text-slate-500 ring-1 ring-slate-200">
+        <code className="min-w-0 flex-1 truncate rounded bg-slate-900 px-3 py-2 font-mono text-xs text-slate-400 ring-1 ring-slate-800">
           {previewUrl}
         </code>
       </div>
 
       {missingRequired && (
-        <p className="mt-2 text-xs text-amber-600">Fill in required path parameters to run.</p>
+        <p className="mt-2 text-xs text-amber-400">Fill in required path parameters to run.</p>
       )}
 
       {result && <ResponseView result={result} />}
@@ -85,22 +85,22 @@ function ParamGroup({
 }) {
   return (
     <div>
-      <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">{title}</p>
+      <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">{title}</p>
       <div className="grid gap-3 sm:grid-cols-2">
         {params.map((p) => (
           <label key={p.name} className="block text-sm">
-            <span className="font-mono text-slate-700">
+            <span className="font-mono text-slate-200">
               {p.name}
-              {p.required && <span className="text-red-500">*</span>}
-              <span className="ml-1 font-sans text-xs text-slate-400">{p.schema?.type}</span>
+              {p.required && <span className="text-red-400">*</span>}
+              <span className="ml-1 font-sans text-xs text-slate-500">{p.schema?.type}</span>
             </span>
             <input
               value={values[p.name] ?? ''}
               onChange={(e) => onChange(p.name, e.target.value)}
               placeholder={p.description ?? ''}
-              className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-1.5 text-sm outline-none focus:border-slate-400 focus:ring-1 focus:ring-slate-300"
+              className="mt-1 w-full rounded-md border border-slate-700 bg-slate-900 px-3 py-1.5 text-sm text-slate-100 outline-none placeholder:text-slate-600 focus:border-slate-500"
             />
-            {p.description && <span className="mt-1 block text-xs text-slate-400">{p.description}</span>}
+            {p.description && <span className="mt-1 block text-xs text-slate-500">{p.description}</span>}
           </label>
         ))}
       </div>

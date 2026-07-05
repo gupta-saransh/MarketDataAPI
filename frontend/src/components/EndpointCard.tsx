@@ -3,11 +3,11 @@ import type { Endpoint } from '../types'
 import TryItPanel from './TryItPanel'
 
 const METHOD_COLORS: Record<string, string> = {
-  get: 'bg-sky-100 text-sky-700',
-  post: 'bg-emerald-100 text-emerald-700',
-  put: 'bg-amber-100 text-amber-700',
-  patch: 'bg-amber-100 text-amber-700',
-  delete: 'bg-red-100 text-red-700',
+  get: 'bg-sky-950 text-sky-300',
+  post: 'bg-emerald-950 text-emerald-300',
+  put: 'bg-amber-950 text-amber-300',
+  patch: 'bg-amber-950 text-amber-300',
+  delete: 'bg-red-950 text-red-300',
 }
 
 function exampleResponse(endpoint: Endpoint): string | null {
@@ -22,31 +22,31 @@ export default function EndpointCard({ endpoint }: { endpoint: Endpoint }) {
   const example = exampleResponse(endpoint)
 
   return (
-    <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+    <div className="overflow-hidden rounded-lg border border-slate-800 bg-slate-900/50">
       <button
         onClick={() => setOpen((o) => !o)}
-        className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-slate-50"
+        className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-slate-800/50"
       >
-        <span className={`rounded px-2 py-0.5 font-mono text-xs font-bold uppercase ${METHOD_COLORS[endpoint.method] ?? 'bg-slate-100 text-slate-600'}`}>
+        <span className={`rounded px-2 py-0.5 font-mono text-xs font-bold uppercase ${METHOD_COLORS[endpoint.method] ?? 'bg-slate-800 text-slate-300'}`}>
           {endpoint.method}
         </span>
-        <code className="font-mono text-sm text-slate-800">{endpoint.path}</code>
-        <span className="truncate text-sm text-slate-400">{endpoint.op.summary}</span>
-        <span className={`ml-auto text-slate-400 transition-transform ${open ? 'rotate-90' : ''}`}>›</span>
+        <code className="font-mono text-sm text-slate-100">{endpoint.path}</code>
+        <span className="truncate text-sm text-slate-500">{endpoint.op.summary}</span>
+        <span className={`ml-auto text-slate-500 transition-transform ${open ? 'rotate-90' : ''}`}>›</span>
       </button>
 
       {open && (
         <div>
           {endpoint.op.description && (
-            <p className="px-4 pb-3 text-sm text-slate-600">{endpoint.op.description}</p>
+            <p className="px-4 pb-3 text-sm text-slate-400">{endpoint.op.description}</p>
           )}
           <TryItPanel endpoint={endpoint} />
           {example && (
-            <div className="border-t border-slate-200 px-4 py-4">
-              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+            <div className="border-t border-slate-800 px-4 py-4">
+              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
                 Example response
               </p>
-              <pre className="max-h-72 overflow-auto rounded-lg bg-slate-100 p-3 font-mono text-xs leading-relaxed text-slate-700">
+              <pre className="max-h-72 overflow-auto rounded-lg bg-slate-950 p-3 font-mono text-xs leading-relaxed text-slate-300">
                 {example}
               </pre>
             </div>
