@@ -1,12 +1,15 @@
 # Market Data API — Indian Mutual Funds + NAV History
 
 A free, public REST API for Indian mutual fund schemes and their NAV history,
-plus a Swagger-style web explorer. Data is seeded from [mfapi.in](https://api.mfapi.in)
-into a local SQLite database (~14,583 schemes, 6-year NAV history), then
-migrated to CockroachDB Serverless for production. The API is served via Fastify
-and runs unchanged on both SQLite and Postgres.
+plus a Swagger-style web explorer and a Groww-style fund visualizer. Data is
+seeded from [mfapi.in](https://api.mfapi.in) into a local SQLite database
+(~14,583 schemes, 5-year NAV history), then migrated to CockroachDB Serverless
+for production. The API is served via Fastify and runs unchanged on both SQLite
+and Postgres.
 
 **Goal / end state:** GitHub → CockroachDB (data) → Vercel (deploy) → public API + hosted explorer.
+
+**Live:** `https://market-data-api-psi.vercel.app`
 
 ---
 
@@ -14,7 +17,10 @@ and runs unchanged on both SQLite and Postgres.
 
 ```
               your-app.vercel.app
-              ├── /            → frontend explorer (static files from frontend/dist)
+              ├── /            → frontend (static files from frontend/dist)
+              │     ├── #          → LandingPage  (hero + feature intro)
+              │     ├── #docs      → API Reference (Swagger-style explorer)
+              │     └── #funds     → Fund Visualizer (Groww-style NAV chart)
               └── /api/*       → Fastify API (serverless function: api/vercel.js)
                                     │
                                     └─► CockroachDB Serverless (prod) OR SQLite (dev)
@@ -37,7 +43,9 @@ and runs unchanged on both SQLite and Postgres.
 
 ```
 market-data-api/
-├── package.json                  ← root-only: "vercel-build" script for @vercel/static-build
+├── README.md                     ← Project README with shields.io badges
+├── LICENSE                       ← Apache 2.0
+├── package.json                  ← root-only: "vercel-build" + "fetch:logos" scripts
 ├── vercel.json                   ← single Vercel project: builds api fn + frontend, routes /api/*
 ├── .github/
 │   └── workflows/
@@ -45,7 +53,8 @@ market-data-api/
 │       └── archive-nav.yml       ← Daily 11:30 PM IST: commit NAVAll.txt → nav-archive/ (DR backup)
 ├── nav-archive/                  ← dated raw NAVAll.txt snapshots (DD-MM-YYYY.txt) for rebuild
 ├── scripts/
-│   └── seed-axiom.js             ← fires ~31 sample requests to populate the Axiom dataset
+│   ├── seed-axiom.js             ← fires ~31 sample requests to populate the Axiom dataset
+│   └── fetch-amc-logos.mjs       ← downloads AMC logos to frontend/public/amc/ (run once)
 ├── api/                          ← Fastify REST API (Node.js 22 ESM)
 │   ├── app.js                    ← Fastify FACTORY: build(); CORS + rate-limit + error handler + Axiom hook
 │   ├── server.js                 ← Local dev entry: build() + .listen(:3001)
@@ -58,7 +67,8 @@ market-data-api/
 │   │   └── schema.postgres.sql   ← Postgres schema + pg_trgm + indexes (run once in CockroachDB)
 │   ├── lib/
 │   │   ├── finance.js            ← Pure financial math (CAGR, rolling returns, Sharpe, SIP/XIRR)
-│   │   └── queries.js            ← Shared data-access layer (SQL + shaping); used by REST routes AND MCP
+│   │   ├── queries.js            ← Shared data-access layer (SQL + shaping); used by REST routes AND MCP
+│   │   └── axiom.js              ← Fire-and-forget logEvent() helper (REST + MCP both use this)
 │   ├── pipeline/
 │   │   ├── seed.js               ← Seeds SQLite from mfapi.in (~14k schemes, resumable)
 │   │   ├── migrate-to-supabase.js← Legacy — one-time SQLite → Supabase copy (deprecated)
@@ -77,23 +87,28 @@ market-data-api/
 │   ├── mfFileMapper.csv          ← 6,778 scheme name mappings
 │   ├── mfHouseMapper.csv         ← 42 fund houses
 │   ├── mfTypeMapper.csv          ← 43 scheme categories
-│   ├── market-data-api.db        ← SQLite DB (gitignored, ~1 GB seeded with 6yr history)
+│   ├── market-data-api.db        ← SQLite DB (gitignored, ~1 GB seeded with 5yr history)
 │   ├── package.json
 │   └── .env.example
 ├── frontend/                     ← React 18 + Vite 5 + TypeScript + Tailwind v3
-│   ├── index.html
+│   ├── index.html                ← title: "Market Data API — Indian Mutual Funds & NAV History"
 │   ├── vite.config.ts            ← dev proxy /api → :3001
 │   ├── .env.example
 │   ├── public/
+│   │   ├── amc/                  ← self-hosted AMC logos (<domain>.png, 31/41 downloaded)
 │   │   └── excel-addin/
 │   │       ├── google-sheets.js  ← Apps Script custom fns (MF_NAV, MF_DAILY_CHANGE, …) — supported
 │   │       └── functions.{js,json,html}, manifest.xml  ← Excel add-in variant (abandoned)
 │   └── src/
-│       ├── types.ts              ← OpenAPI + result types
+│       ├── App.tsx               ← hash router: #→Landing, #docs→Docs, #funds→FundsPage
+│       ├── LandingPage.tsx       ← hero page with links to #funds and #docs
+│       ├── FundsPage.tsx         ← Fund Visualizer (Groww-style): search, NAV chart, risk stats, logos
+│       ├── types.ts              ← OpenAPI types + fund/NAV domain types (NavPoint, SchemeDetail, …)
 │       ├── lib/api.ts            ← API_BASE, buildUrl(), sendRequest(), checkHealth()
 │       ├── hooks/useOpenApi.ts   ← fetches /openapi.json, groups by tag
 │       └── components/
 │           ├── Header.tsx        ← title + health dot (polls /health every 15s)
+│           ├── NavChart.tsx      ← dependency-free SVG NAV chart (axis labels, hover, drag select)
 │           ├── EndpointGroup.tsx ← one section per tag
 │           ├── EndpointCard.tsx  ← method + path + example response
 │           ├── TryItPanel.tsx    ← param inputs → URL preview → Run → response
@@ -112,7 +127,7 @@ market-data-api/
   - Prod DB: `pg` (node-postgres) → CockroachDB Serverless (PostgreSQL wire-compatible)
 - **Frontend**: React 18, Vite 5, TypeScript (strict), Tailwind CSS v3. No router, no fetch lib.
 - **Data**: [mfapi.in](https://api.mfapi.in) (initial seed); [AMFI NAVAll.txt](https://portal.amfiindia.com/spages/NAVAll.txt) (daily sync)
-- **Deployment**: Vercel (static frontend + serverless API function), CockroachDB Serverless (Postgres)
+- **Deployment**: Vercel (static frontend + serverless API function) in **bom1 (Mumbai)** region, CockroachDB Serverless (Postgres)
 
 ---
 
@@ -190,12 +205,141 @@ the parsed body to the transport. **No new serverless function** (rides inside
 each with a zod `outputSchema` returning `structuredContent`. `/sync-nav` is **not**
 exposed. Tools call `lib/queries.js` directly — the **shared data-access layer** that the
 REST routes also use, so SQL lives once and the two surfaces can't drift. Open auth
-(reuses the global rate limiter); MCP traffic is excluded from the Axiom hook for now.
-**Full design + status: `MCP.md`.**
+(reuses the global rate limiter). **Full design + status: `MCP.md`.**
+
+**MCP Axiom logging:** Because `reply.hijack()` removes MCP requests from the Fastify
+lifecycle, the global `onResponse` hook never fires for `/mcp`. MCP tool calls are instead
+logged via the `reg()` wrapper inside `buildServer()`, which calls `logEvent()` from
+`api/lib/axiom.js` in a `finally` block per tool invocation. Request context (ip, country,
+city, ua, referer) is extracted from the raw request in the route handler and threaded into
+`buildServer(ctx)` so it's available to every tool log.
+
+**MCP connector example (Claude Desktop / claude.ai):**
+```json
+{
+  "mcpServers": {
+    "market-data-api": {
+      "url": "https://market-data-api-psi.vercel.app/api/mcp"
+    }
+  }
+}
+```
+
+### Axiom Analytics — `api/lib/axiom.js`
+
+Shared fire-and-forget helper used by both REST routes and the MCP server:
+
+```js
+export function logEvent(event) {
+  const token = process.env.AXIOM_TOKEN
+  const dataset = process.env.AXIOM_DATASET
+  if (!token || !dataset) return
+  fetch(`https://api.axiom.co/v1/datasets/${dataset}/ingest`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify([{ _time: new Date().toISOString(), ...event }]),
+  }).catch(() => {})
+}
+```
+
+No-ops when env vars are unset (safe in local dev). Never affects responses.
+
+**REST events** (`source: 'rest'`): fired from the `onResponse` hook in `app.js`, carrying
+~17 fields: `method`, `route`, `endpoint_type`, `status`, `ms`, `scheme_code`, `isin`, `q`,
+filter params, `ip`, `country`, `city`, `ua`, `referer`. `/health` and `/openapi.json` are
+excluded.
+
+**MCP events** (`source: 'mcp'`): fired per tool call from the `reg()` wrapper in `mcp.js`,
+carrying `tool`, `endpoint_type`, `is_error`, `ms`, plus the same geo/request context.
+
+**Axiom dashboard tips:** Build panels manually (the auto-wizard chokes on small data).
+Use **Top list** for rankings, **Table** for tabular, **Statistic** for single numbers.
+Set time range to "Last 24 hours"/"Last 7 days" — not "Last 15 mins". The APL query
+`summarize topk(field, 20)` is required for Top list panels (sort+limit errors after summarize).
+
+`scripts/seed-axiom.js` fires ~31 requests across all endpoint types to populate the dataset.
 
 ### OpenAPI Spec — `api/openapi.js`
 
 Hand-written OpenAPI 3.1, served at `GET /openapi.json`. **Not auto-generated.** The frontend renders this directly — update it whenever routes change. Example data uses real values from the DB (scheme 101762, HDFC Flexi Cap Fund - Growth Plan). Analytics endpoints (returns/rolling/risk/sip) are documented.
+
+---
+
+## Frontend Architecture
+
+### Hash-Based Routing (`frontend/src/App.tsx`)
+
+No React Router. URL hash drives the active page:
+
+```ts
+function routeFor(hash: string): 'landing' | 'docs' | 'funds' {
+  if (hash.startsWith('#docs')) return 'docs'
+  if (hash.startsWith('#funds')) return 'funds'
+  return 'landing'
+}
+```
+
+Pages: `LandingPage` (`#`), API Reference / docs explorer (`#docs`), `FundsPage` (`#funds`).
+`window.addEventListener('hashchange', ...)` triggers re-render.
+
+### Fund Visualizer (`frontend/src/FundsPage.tsx`)
+
+Groww-style mutual fund card. Features:
+
+- **Search**: debounced 250ms, calls `GET /schemes?q=&limit=8`, dropdown autocomplete.
+- **Fund card**: AMC logo avatar, scheme name, category chips, risk chip (Very High / High / Moderate / Low).
+- **Headline return**: large signed % for the selected range; 1D change below it.
+- **NavChart**: dependency-free SVG chart (see below).
+- **Range toggles**: 1M / 6M / 1Y / 3Y / All.
+- **Stat tiles** (6): NAV, 1Y return, 3Y CAGR, Volatility, Max Drawdown, Sharpe ratio.
+  - 1Y and 3Y returns come from `GET /schemes/:code/returns` (server-computed, fixed periods).
+  - Volatility, drawdown, Sharpe are computed **client-side** from the visible slice via
+    `computeRisk()` so they adjust when the range toggle changes. This mirrors `finance.js` formulas
+    exactly (sample stdev * sqrt(252), peak-to-trough drawdown, CAGR, Sharpe at rf=6%).
+- **Tooltips**: each stat tile has an `ⓘ` icon with a hover/focus tooltip explaining the metric
+  in plain language (e.g. "How bumpy the ride is...").
+- **Default scheme**: 101762 (HDFC Flexi Cap Fund) so the page always loads with real data.
+
+All domain types (`NavPoint`, `SchemeDetail`, `Period`, `ReturnsResp`, `Risk`, `SearchRow`)
+live in `frontend/src/types.ts`.
+
+### NAV Chart (`frontend/src/components/NavChart.tsx`)
+
+Dependency-free line chart — no charting library.
+
+**Architecture:**
+- Line + gradient fill + gridlines live in an SVG (`viewBox="0 0 100 100"`,
+  `preserveAspectRatio="none"`). `vectorEffect="non-scaling-stroke"` keeps stroke widths crisp.
+- Axis labels are **HTML** (y-values in a 48px left gutter, x-dates in a 16px bottom row) so
+  they don't get stretched or distorted by the aspect-ratio-none SVG.
+
+**Interactions:**
+- **Hover**: vertical crosshair + dot + tooltip showing `₹NAV` and date.
+- **Click-drag**: shades the swept band, places dots at endpoints, shows
+  `₹±change (±%)  startDate → endDate` in a floating label. Persists on mouse-up; clears
+  on `mouseleave`. A plain click (no drag) clears the selection.
+- State resets on range toggle via `useEffect` on `[n, firstDate]`.
+
+**Formatting:** x-axis date format adapts to span (≤120 days → `15 Jun`, else `Jun '24`).
+Y-axis values use `toLocaleString('en-IN')` for Indian number formatting.
+
+### AMC Logos (`frontend/public/amc/`)
+
+Self-hosted AMC (fund house) logos served as `/amc/<domain>.png`. Populated by
+`scripts/fetch-amc-logos.mjs` (run once: `npm run fetch:logos` from repo root).
+
+**Three-level fallback in `Avatar` component:**
+1. Local file `/amc/<domain>.png` (self-hosted, 31/41 available)
+2. Google favicon CDN `https://www.google.com/s2/favicons?domain=<domain>&sz=128`
+3. Colored initial (hash of fund name → one of 7 Tailwind colors)
+
+**AMC domain mapping:** `AMC_DOMAINS` in `FundsPage.tsx` — 42 `[fragment, domain]` pairs.
+Matching uses substring search on lowercased fund house name. `amcDomain()` returns the
+domain or `null` for unknown houses.
+
+**10 logos still missing** (all three sources failed): ICICI Pru, Nippon, Canara Robeco,
+Sundaram, Union, JM Financial, Samco, Helios, Shriram, Quantum. Re-run the script or
+drop `.png` files manually into `frontend/public/amc/`.
 
 ---
 
@@ -220,7 +364,7 @@ nav_history        (scheme_code→schemes CASCADE, nav_date TEXT, nav REAL,
 - `idx_schemes_name` on `schemes(scheme_name)` — ORDER BY
 - `idx_schemes_name_trgm` GIN on `lower(scheme_name)` — Postgres only, fast LIKE '%q%'
 
-**DB size (CockroachDB production):** 41 fund_houses, 42 categories, 14,583 schemes, ~9.67M nav_history rows, date range 2021-06-20 → 2026-06-20 (5 years migrated; 6th year pending re-run). Seeded with `NAV_YEARS=5`.
+**DB size (CockroachDB production):** 41 fund_houses, 42 categories, 14,583 schemes, ~9.67M nav_history rows, date range 2021-06-20 → 2026-06-20 (5 years migrated). Seeded with `NAV_YEARS=5`.
 
 ---
 
@@ -282,6 +426,9 @@ GET /schemes/:code/sip?amount=5000&from=YYYY-MM-DD&to=YYYY-MM-DD
     months, total_invested, current_value, absolute_gain, xirr }
    404 → { error: 'No NAV data found for scheme' }
 
+POST /mcp
+→ MCP Streamable HTTP endpoint for AI agents (11 read-only tools)
+
 POST /sync-nav
 Headers: Authorization: Bearer <SYNC_NAV_SECRET>
 → { nav_date, parsed, inserted, skipped }
@@ -319,6 +466,10 @@ Root `package.json` has a `vercel-build` script: `cd frontend && npm install && 
 **Why `builds` and not zero-config (`buildCommand`+`outputDirectory`):**
 Zero-config auto-detects every `.js` file in `api/` as a serverless function (12+ files → exceeds Vercel Hobby plan's 12-function limit).
 
+**Region: `bom1` (Mumbai)** — set in Vercel project settings. Co-locates the serverless function
+with the CockroachDB cluster (also in Mumbai). Moving from the default `iad1` (Washington DC)
+to `bom1` dramatically reduces latency for Indian users and Google Sheets callers.
+
 ---
 
 ## GitHub Actions — NAV Sync (`sync-nav.yml`)
@@ -346,18 +497,6 @@ Disaster-recovery backup, separate from the sync job. Runs **once daily at 11:30
 
 ---
 
-## Analytics — Axiom (`api/app.js` `onResponse` hook)
-
-Fire-and-forget request analytics. An `onResponse` hook POSTs one event per request to Axiom's direct HTTP ingest API (`https://api.axiom.co/v1/datasets/{AXIOM_DATASET}/ingest`, Bearer `AXIOM_TOKEN`). **No Vercel log drain needed** (that requires a Pro plan). Skipped entirely if `AXIOM_TOKEN`/`AXIOM_DATASET` are unset (safe in local dev); `/health` and `/openapi.json` are excluded.
-
-Each event carries ~17 fields: `_time`, `method`, `route` (matched pattern via `req.routeOptions?.url`), `endpoint_type` (mapped label like `nav_latest`/`search`/`scheme_detail`/`returns`/`rolling`/`risk`/`sip`), `status`, `ms` (`reply.elapsedTime`), `scheme_code`, `isin`, `q`, the filter params, `ip` (`x-forwarded-for`), `country`/`city` (Vercel geo headers), `ua`, `referer`. The `fetch` is `.catch(() => {})` — analytics never affects the response.
-
-Build Axiom dashboards **manually** panel-by-panel (the auto-wizard chokes on small data). No bar chart exists — use **Top list** for rankings, **Table** for tabular, **Statistic** for single numbers. Set the dashboard time range to "Last 24 hours"/"Last 7 days" (not "Last 15 mins") to avoid "disposed"/"too little data" errors.
-
-`scripts/seed-axiom.js` fires ~31 requests across all endpoint types to populate the dataset for dashboard building.
-
----
-
 ## Spreadsheet Functions — Google Sheets (`frontend/public/excel-addin/google-sheets.js`)
 
 Google Apps Script custom functions that call the public API like spreadsheet formulas. Paste the whole file into **Extensions → Apps Script → Code.gs → Save**, then use e.g. `=MF_NAV(101762)` in any cell.
@@ -365,6 +504,10 @@ Google Apps Script custom functions that call the public API like spreadsheet fo
 Functions: `MF_NAV`, `MF_NAV_DATE`, `MF_NAV_ON(code, date)`, `MF_NAME`, `MF_FUND_HOUSE`, `MF_PREV_NAV`, `MF_DAILY_CHANGE` (%), `MF_DAILY_CHANGE_ABS`. Helpers: `mfGet_` (`UrlFetchApp.fetch`, synchronous), `toApiDate_` (Date/`DD-MM-YYYY`/`YYYY-MM-DD` → `YYYY-MM-DD`), `_lastTwoNavs_` (7-day window → two most recent NAVs).
 
 **Weekend/holiday handling:** NAV exists only for trading days. `MF_NAV_ON` and `_lastTwoNavs_` query a **multi-day look-back window** (`startDate=date-5d..date`) and take `data[0]` (newest-first) — i.e. the nearest trading day on/before the requested date — instead of an exact-date match that would error on weekends/holidays.
+
+**Latency:** Moving Vercel to **bom1 (Mumbai)** dramatically reduces latency for Google Sheets
+callers compared to the default US-east region. CockroachDB is also in Mumbai. This is the
+single most impactful latency fix for Indian users.
 
 **Gotchas (hard-won):**
 - Custom functions are **bound to one spreadsheet**. A new blank Sheet has no script → no functions. Use **File → Make a copy** of the master sheet, or deploy as a Workspace **Add-on** (Apps Script **Libraries do NOT work** for custom functions).
@@ -400,6 +543,7 @@ Functions: `MF_NAV`, `MF_NAV_DATE`, `MF_NAV_ON(code, date)`, `MF_NAME`, `MF_FUND
 ### Vercel env vars (set in project settings)
 - `DATABASE_URL` — CockroachDB connection string (`postgresql://user:pass@host:26257/dbname?sslmode=verify-full`)
 - `SYNC_NAV_SECRET` — must match the GitHub Actions secret of the same name
+- Region: set to **bom1** in Vercel project settings (not an env var, it's a project config)
 
 ---
 
@@ -418,11 +562,15 @@ cd frontend
 cp .env.example .env
 npm install
 npm run dev               # http://localhost:5173 (proxies /api → :3001)
+
+# One-time: download AMC logos
+npm run fetch:logos       # from repo root
 ```
 
 ### npm scripts
 - **api**: `dev` (--watch), `start`, `seed`, `seed:force`, `migrate:cockroach`, `prune`, `test`
 - **frontend**: `dev`, `build` (`tsc -b && vite build`), `preview`
+- **root**: `vercel-build`, `fetch:logos`
 
 ---
 
@@ -438,6 +586,7 @@ npm run dev               # http://localhost:5173 (proxies /api → :3001)
 [ ] Pushed to GitHub
 [ ] Vercel: New Project → import repo → Framework: Other → Root: /
 [ ] Vercel env vars            — DATABASE_URL (CockroachDB) + SYNC_NAV_SECRET
+[ ] Vercel region              — set to bom1 (Mumbai) in project settings
 [ ] Vercel deploy              — green build, /api/health → driver:postgres
 [ ] GitHub secrets             — SYNC_NAV_SECRET + VERCEL_APP_URL
 [ ] Manual workflow run        — Actions → Sync NAV from AMFI → Run workflow → returns JSON
@@ -453,9 +602,16 @@ npm run dev               # http://localhost:5173 (proxies /api → :3001)
 - **Password special characters** in `DATABASE_URL` must be URL-encoded (`encodeURIComponent()`).
 - **SQLite cannot run on Vercel** — ephemeral FS. `DATABASE_URL` is required in production.
 - **`openapi.js` is hand-maintained** — update it when routes change.
-- **SQLite DB is gitignored** — never commit it (~1 GB with 6yr history).
+- **SQLite DB is gitignored** — never commit it (~1 GB with 5yr history).
 - **Migration is idempotent** (`ON CONFLICT DO NOTHING`) — safe to re-run if interrupted.
 - **`migrate-to-supabase.js` is legacy** — kept for reference, use `migrate-to-cockroach.js` going forward.
+- **MCP uses `reply.hijack()`** — the Fastify lifecycle (including `onResponse`) never fires for
+  `/mcp`. Axiom logging for MCP is handled separately via the `reg()` wrapper inside `buildServer()`.
+- **Axiom APL syntax** — after `summarize`, you can only use `topk()` or `count()`. `sort | limit`
+  after `summarize` errors. Use `| summarize topk(field, 20)` for Top list panels.
+- **AMC logos for 10 funds are missing** — Google favicons, unavatar, and DuckDuckGo all returned
+  nothing for: ICICI Pru, Nippon, Canara Robeco, Sundaram, Union, JM Financial, Samco, Helios,
+  Shriram, Quantum. Falls back to colored initial. Manual PNGs can be dropped into `frontend/public/amc/`.
 
 ---
 
@@ -481,11 +637,37 @@ npm run dev               # http://localhost:5173 (proxies /api → :3001)
 
 ---
 
+## Feature Roadmap (not yet built)
+
+Ideas discussed, prioritized by impact vs effort:
+
+**High impact, data already supports:**
+- **Batch NAV** — `GET /nav/latest?codes=101762,118778,120503` returns many latest NAVs in one call. Useful for portfolio widgets and Google Sheets range formulas.
+- **Screener** — `GET /schemes/screen?min_return_1y=10&max_vol=15&sort=sharpe&limit=20` filters and ranks all schemes by computed metrics. Requires pre-computing or computing in-query.
+- **Benchmark comparison** — alpha and beta vs Nifty 50 (or another index scheme). Needs a reference series stored in nav_history or fetched on the fly.
+- **Portfolio endpoint** — `POST /portfolio/value` with `{ holdings: [{code, units}] }` returns current value, day change, XIRR for the portfolio.
+
+**Medium effort:**
+- **Additional ratios** — Sortino (downside-only vol), Calmar (CAGR / max drawdown), Treynor.
+- **Fund comparison overlay** — chart two schemes on the same axes, rebased to 100 at start of period.
+- **Peer ranking** — where does this fund rank in its category by 1Y/3Y return or Sharpe.
+
+**Low effort:**
+- **Cache-Control headers** — `s-maxage=1800, stale-while-revalidate=86400` on NAV and analytics routes. Free latency and DB load reduction via Vercel's edge cache.
+- **SIP goal-mode** — given a target amount and monthly SIP, compute how many months to goal.
+- **Dividend history** — parse the dividend lines from NAVAll.txt (currently ignored).
+
+---
+
 ## Verified Working
 
-- Frontend: `npm run build` passes (tsc strict + vite build, 152 KB JS gzipped to 49 KB).
+- Frontend: `npm run build` passes (tsc strict + vite build, ~152 KB JS gzipped to ~49 KB).
 - API on SQLite: `/health` → `{driver:'sqlite'}`, all routes return correct data.
 - CockroachDB migration: completed — 41 fund_houses, 42 categories, 14,583 schemes, ~9.67M nav_history rows (2021-06-20 → 2026-06-20).
 - All 12 smoke-test endpoints pass against CockroachDB (health, fund-houses, categories, schemes search, scheme detail, ISIN lookup, nav/latest, nav range, returns, risk, sip, 404 handling).
-- Vercel deployment: pending cutover — update `DATABASE_URL` in Vercel project settings to CockroachDB URL and redeploy.
-- AMFI sync: `POST /sync-nav` logic verified; GitHub Actions workflow ready.
+- MCP server: 11 tools verified via Claude Desktop and direct POST. `structuredContent` output schema in each tool.
+- Axiom: REST events logged (source='rest'); MCP tool events logged (source='mcp') via reg() wrapper.
+- Fund Visualizer: loads at `#funds`, search works, chart renders with drag select, risk tiles adjust to range toggle.
+- AMC logos: 31/41 self-hosted; remaining 10 fall back to colored initial.
+- Google Sheets: latency improved significantly after moving Vercel region to bom1 (Mumbai).
+- GitHub Actions: sync-nav fires 5x/day; archive-nav commits NAVAll.txt daily.
