@@ -23,17 +23,29 @@ import navRoutes        from './routes/nav.js'
 import syncRoutes       from './routes/sync.js'
 import mcpRoutes        from './routes/mcp.js'
 
-// Per-route-prefix edge cache policy. NAV updates at most once a day (AMFI
-// publishes daily), catalogs almost never change, and search tolerates a short
-// cache, so each class gets its own TTL instead of one blanket policy.
-// s-maxage is honoured by Vercel's edge cache; clients see the same header.
-const DAY = 86400
+// Per-route-prefix edge cache policy, split by how volatile the data is.
+//
+// Catalogs (/fund-houses, /categories) and the OpenAPI spec barely change, so
+// they get a long shared-cache TTL.
+//
+// Everything that embeds the latest NAV gets a SHORT TTL. This matters for
+// correctness, not just freshness: the latest NAV is exposed by sibling URLs
+// (/schemes/:code, /schemes/:code/nav/latest, /nav/latest, and the analytics
+// routes), and the edge caches each URL independently. With a long TTL, after a
+// NAV sync those sibling caches expire on different clocks, so one URL can serve
+// today's NAV while another still serves yesterday's — they visibly disagree.
+// A 60s TTL keeps burst absorption while capping any cross-endpoint drift at ~1
+// minute. `max-age` is set explicitly so the client-facing header carries real
+// freshness (Vercel consumes `s-maxage` for its edge cache and would otherwise
+// leave a bare `Cache-Control: public`).
+const DAY     = 86400
+const NAV_TTL = 60
 const CACHE_RULES = [
-  ['/fund-houses',  `public, s-maxage=${DAY}, stale-while-revalidate=${DAY}`],
-  ['/categories',   `public, s-maxage=${DAY}, stale-while-revalidate=${DAY}`],
-  ['/openapi.json', `public, s-maxage=3600, stale-while-revalidate=${DAY}`],
-  ['/nav/latest',   `public, s-maxage=1800, stale-while-revalidate=${DAY}`],
-  ['/schemes',      `public, s-maxage=1800, stale-while-revalidate=${DAY}`],
+  ['/fund-houses',  `public, max-age=300, s-maxage=${DAY}, stale-while-revalidate=${DAY}`],
+  ['/categories',   `public, max-age=300, s-maxage=${DAY}, stale-while-revalidate=${DAY}`],
+  ['/openapi.json', `public, max-age=300, s-maxage=3600, stale-while-revalidate=${DAY}`],
+  ['/nav/latest',   `public, max-age=${NAV_TTL}, s-maxage=${NAV_TTL}, stale-while-revalidate=300`],
+  ['/schemes',      `public, max-age=${NAV_TTL}, s-maxage=${NAV_TTL}, stale-while-revalidate=300`],
 ]
 
 function cacheControlFor(url) {

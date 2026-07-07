@@ -4,7 +4,8 @@
       "Bash(npm run *)",
       "Bash(curl -s -m 20 https://market-data-api-psi.vercel.app/api/schemes/101762/returns)",
       "Bash(node -e 'const d=JSON.parse\\(require\\(\"fs\"\\).readFileSync\\(0\\)\\);console.log\\(\"first:\",JSON.stringify\\(d.data[0]\\),\"last:\",JSON.stringify\\(d.data[d.data.length-1]\\)\\)')",
-      "Bash(node scripts/fetch-amc-logos.mjs)"
+      "Bash(node scripts/fetch-amc-logos.mjs)",
+      "Bash(npm test *)"
     ]
   }
 }

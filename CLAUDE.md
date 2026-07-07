@@ -632,8 +632,15 @@ npm run fetch:logos       # from repo root
   token compare (sha256 both sides + `crypto.timingSafeEqual`) in routes/sync.js.
 - **Security headers** — `onSend` hook in app.js sets `X-Content-Type-Options: nosniff`,
   `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`, a restrictive CSP, and HSTS on every response.
-- **Edge caching** — per-endpoint `Cache-Control` via `CACHE_RULES` in app.js (catalogs 24h,
-  schemes/NAV/analytics 30 min, openapi 1h; applied to GET 200s only, errors stay uncached).
+- **Edge caching** — per-endpoint `Cache-Control` via `CACHE_RULES` in app.js. Catalogs get a
+  24h edge TTL (openapi 1h); everything that embeds the latest NAV (`/schemes/*`, `/nav/latest`,
+  analytics) gets a **short 60s** edge TTL. The short TTL is a correctness requirement, not just
+  freshness: the latest NAV is exposed by sibling URLs that the edge caches independently, so a
+  long TTL let `/schemes/:code` and `/schemes/:code/nav/latest` drift out of sync for up to the
+  TTL after a NAV sync (one served today's NAV, the other yesterday's). 60s caps that drift at ~1
+  minute while keeping burst absorption. Applied to GET 200s only; errors stay uncached. An
+  explicit `max-age` is always set so the client header is never a bare `public` (Vercel consumes
+  `s-maxage` for its edge cache).
 
 ### Verified safe
 - **SQL injection** — all queries use `?` placeholders bound as params, including `LIKE '%q%'` (the `%q%` is a *parameter*, not interpolated). Only string-built SQL is the batch-insert placeholder list in `sync.js`, which interpolates a row *count*, not user data.
