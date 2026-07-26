@@ -19,6 +19,7 @@ import fundHousesRoutes from './routes/fund-houses.js'
 import categoriesRoutes from './routes/categories.js'
 import schemesRoutes    from './routes/schemes.js'
 import analyticsRoutes  from './routes/analytics.js'
+import holdingsRoutes   from './routes/holdings.js'
 import navRoutes        from './routes/nav.js'
 import syncRoutes       from './routes/sync.js'
 import mcpRoutes        from './routes/mcp.js'
@@ -38,8 +39,11 @@ import mcpRoutes        from './routes/mcp.js'
 // minute. `max-age` is set explicitly so the client-facing header carries real
 // freshness (Vercel consumes `s-maxage` for its edge cache and would otherwise
 // leave a bare `Cache-Control: public`).
-const DAY     = 86400
-const NAV_TTL = 60
+const DAY          = 86400
+const NAV_TTL      = 60
+const HOLDINGS_TTL = 3600   // holdings change ~monthly; our DB already caches, so a 1h
+                            // edge TTL just trims duplicate function invocations. No
+                            // sibling URL exposes this fact, so there is no drift risk.
 const CACHE_RULES = [
   ['/fund-houses',  `public, max-age=300, s-maxage=${DAY}, stale-while-revalidate=${DAY}`],
   ['/categories',   `public, max-age=300, s-maxage=${DAY}, stale-while-revalidate=${DAY}`],
@@ -50,6 +54,11 @@ const CACHE_RULES = [
 
 function cacheControlFor(url) {
   const path = url.split('?')[0]
+  // Holdings lives under /schemes/:code/holdings but is far less volatile than the
+  // NAV-bearing routes, so match its suffix before the /schemes prefix rule.
+  if (path.endsWith('/holdings')) {
+    return `public, max-age=${HOLDINGS_TTL}, s-maxage=${HOLDINGS_TTL}, stale-while-revalidate=${DAY}`
+  }
   for (const [prefix, value] of CACHE_RULES) if (path.startsWith(prefix)) return value
   return null
 }
@@ -102,6 +111,7 @@ export async function build(opts = {}) {
   await app.register(categoriesRoutes, { prefix: '/categories' })
   await app.register(schemesRoutes,    { prefix: '/schemes' })
   await app.register(analyticsRoutes,  { prefix: '/schemes' })
+  await app.register(holdingsRoutes,   { prefix: '/schemes' })
   await app.register(navRoutes)
   await app.register(syncRoutes)
   await app.register(mcpRoutes)
@@ -120,6 +130,7 @@ export async function build(opts = {}) {
     '/schemes/:code/rolling':    'rolling',
     '/schemes/:code/risk':       'risk',
     '/schemes/:code/sip':        'sip',
+    '/schemes/:code/holdings':   'holdings',
     '/schemes/isin/:isin':       'isin_lookup',
     '/schemes/:code':            'scheme_detail',
     '/schemes/':                 'search',

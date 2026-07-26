@@ -40,6 +40,18 @@ CREATE TABLE IF NOT EXISTS nav_history (
     PRIMARY KEY (scheme_code, nav_date)
 );
 
+-- Lazy on-demand cache of fund portfolio holdings, fetched from finapi.upvaly.com
+-- (rate-limited, so never bulk-filled). One row per scheme, refreshed after a TTL.
+-- payload is the normalized allocation JSON as TEXT (kept as text, not jsonb, so
+-- the SQLite and Postgres adapters read/write it identically). {"missing":true}
+-- is a negative-cache marker for schemes finapi has no portfolio for.
+CREATE TABLE IF NOT EXISTS fund_holdings (
+    scheme_code   integer PRIMARY KEY REFERENCES schemes(scheme_code) ON DELETE CASCADE,
+    fetched_at    text    NOT NULL,
+    holdings_date text,
+    payload       text    NOT NULL
+);
+
 CREATE EXTENSION IF NOT EXISTS pg_trgm;
 
 CREATE INDEX IF NOT EXISTS idx_nav_history_scheme_date ON nav_history (scheme_code, nav_date DESC);

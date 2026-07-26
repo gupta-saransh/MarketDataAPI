@@ -5,7 +5,15 @@
       "Bash(curl -s -m 20 https://market-data-api-psi.vercel.app/api/schemes/101762/returns)",
       "Bash(node -e 'const d=JSON.parse\\(require\\(\"fs\"\\).readFileSync\\(0\\)\\);console.log\\(\"first:\",JSON.stringify\\(d.data[0]\\),\"last:\",JSON.stringify\\(d.data[d.data.length-1]\\)\\)')",
       "Bash(node scripts/fetch-amc-logos.mjs)",
-      "Bash(npm test *)"
+      "Bash(npm test *)",
+      "Bash(curl -sS -D - -o /tmp/mf.json \"https://finapi.upvaly.com/api/mf/scheme-code/101762\" -w \"\\\\nHTTP_TIME: %{time_total}s\\\\n\")",
+      "Bash(python -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\('root:', list\\(d.keys\\(\\)\\)\\); print\\('data:', list\\(d['data'].keys\\(\\)\\)\\)\")",
+      "Bash(node -e \"const d=require\\('/tmp/mf.json'\\); console.log\\('root:',Object.keys\\(d\\)\\); console.log\\('data:',Object.keys\\(d.data\\)\\);\")",
+      "Bash(node -e \"const d=require\\('/tmp/mf.json'\\).data; console.log\\('holdings count:',d.holdings.length\\); console.log\\(JSON.stringify\\(d.holdings.slice\\(0,3\\),null,1\\)\\); console.log\\('sectors count:',d.sectors.length\\); console.log\\('sector[0]:',JSON.stringify\\(d.sectors[0]\\)\\);\")",
+      "Bash(python -c ' *)",
+      "Bash(curl -sS -o - -w \"\\\\nHTTP:%{http_code}\\\\n\" \"https://finapi.upvaly.com/api/mf/scheme-code/99999999\")",
+      "Bash(node --experimental-sqlite -e ' *)",
+      "Bash(DATABASE_URL='' DB_PATH=./market-data-api.db AXIOM_TOKEN='' AXIOM_DATASET='' node --experimental-sqlite -e ' *)"
     ]
   }
 }

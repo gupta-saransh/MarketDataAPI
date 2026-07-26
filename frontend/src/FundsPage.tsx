@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { API_BASE } from './lib/api'
 import NavChart from './components/NavChart'
-import type { NavPoint, SchemeDetail, Period, ReturnsResp, Risk, RollingResp, SearchRow, SipResp } from './types'
+import type { NavPoint, SchemeDetail, Period, ReturnsResp, Risk, RollingResp, SearchRow, SipResp, HoldingsResp } from './types'
 
 // ── ranges ────────────────────────────────────────────────────
 type Range = '1M' | '6M' | '1Y' | '3Y' | 'All'
@@ -400,6 +400,9 @@ export default function FundsPage() {
           </div>
         )}
 
+        {/* Portfolio holdings: what the fund actually owns */}
+        {!error && !loading && <HoldingsCard code={code} />}
+
         {/* Rolling returns: consistency, not just a headline number */}
         {!error && !loading && <RollingCard code={code} />}
 
@@ -502,6 +505,125 @@ function ShareButton({ code }: { code: string }) {
     >
       {copied ? 'Link copied ✓' : 'Share'}
     </button>
+  )
+}
+
+// Portfolio holdings: top securities, sector mix, and the equity/debt/cash split.
+// Allocation is proxied from finapi and cached server-side (disclosed ~monthly).
+function HoldingsCard({ code }: { code: string }) {
+  const [data, setData] = useState<HoldingsResp | null>(null)
+  const [state, setState] = useState<'loading' | 'ok' | 'empty' | 'error'>('loading')
+
+  useEffect(() => {
+    let active = true
+    setState('loading')
+    getJson<HoldingsResp>(`/schemes/${code}/holdings`)
+      .then((r) => {
+        if (!active) return
+        setData(r)
+        setState(r.holdings && r.holdings.length ? 'ok' : 'empty')
+      })
+      .catch(() => { if (active) setState('error') })
+    return () => { active = false }
+  }, [code])
+
+  const topHoldings = (data?.holdings ?? []).slice(0, 10)
+  const maxHolding = Math.max(1, ...topHoldings.map((h) => h.weightage ?? 0))
+  const topSectors = (data?.sectors ?? []).slice(0, 8)
+  const maxSector = Math.max(1, ...topSectors.map((s) => s.weightage ?? 0))
+  const aa = data?.asset_allocation
+
+  return (
+    <div className="mt-6 rounded-2xl border border-slate-800 bg-slate-900/50 p-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-sm font-semibold text-white">Portfolio holdings</h2>
+          <p className="mt-0.5 text-xs text-slate-400">What the fund owns right now. Disclosed roughly monthly.</p>
+        </div>
+        {state === 'ok' && data?.concentration?.number_of_holdings != null && (
+          <span className="text-xs text-slate-500">{data.concentration.number_of_holdings} holdings</span>
+        )}
+      </div>
+
+      {state === 'loading' && <div className="mt-5 h-40 animate-pulse rounded bg-slate-800" />}
+      {state === 'error' && (
+        <p className="mt-5 text-sm text-slate-400">Holdings are temporarily unavailable. Try again shortly.</p>
+      )}
+      {state === 'empty' && (
+        <p className="mt-5 text-sm text-slate-400">{data?.note ?? 'No portfolio data available for this fund.'}</p>
+      )}
+
+      {state === 'ok' && data && (
+        <>
+          {aa && (aa.equity != null || aa.debt != null || aa.cash != null) && (
+            <div className="mt-5">
+              <div className="flex h-2.5 overflow-hidden rounded-full bg-slate-800">
+                {aa.equity ? <div style={{ width: `${aa.equity}%` }} className="bg-emerald-500" /> : null}
+                {aa.debt ? <div style={{ width: `${aa.debt}%` }} className="bg-amber-500" /> : null}
+                {aa.cash ? <div style={{ width: `${aa.cash}%` }} className="bg-sky-500" /> : null}
+                {aa.other ? <div style={{ width: `${aa.other}%` }} className="bg-slate-500" /> : null}
+              </div>
+              <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-400">
+                {aa.equity != null && <Legend color="bg-emerald-500" label="Equity" v={aa.equity} />}
+                {aa.debt != null && <Legend color="bg-amber-500" label="Debt" v={aa.debt} />}
+                {aa.cash != null && <Legend color="bg-sky-500" label="Cash" v={aa.cash} />}
+                {aa.other ? <Legend color="bg-slate-500" label="Other" v={aa.other} /> : null}
+              </div>
+            </div>
+          )}
+
+          <div className="mt-6 grid gap-8 sm:grid-cols-2">
+            <div>
+              <h3 className="text-xs font-semibold uppercase tracking-widest text-slate-500">Top holdings</h3>
+              <ul className="mt-3 space-y-2.5">
+                {topHoldings.map((h, i) => (
+                  <li key={i}>
+                    <div className="flex items-baseline justify-between gap-3 text-sm">
+                      <span className="truncate text-slate-200">{h.name ?? 'n/a'}</span>
+                      <span className="shrink-0 tabular-nums text-slate-400">{h.weightage?.toFixed(2) ?? '–'}%</span>
+                    </div>
+                    <div className="mt-1 h-1 overflow-hidden rounded-full bg-slate-800">
+                      <div className="h-full rounded-full bg-emerald-500/70" style={{ width: `${((h.weightage ?? 0) / maxHolding) * 100}%` }} />
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            <div>
+              <h3 className="text-xs font-semibold uppercase tracking-widest text-slate-500">Sector mix</h3>
+              <ul className="mt-3 space-y-2.5">
+                {topSectors.map((s, i) => (
+                  <li key={i}>
+                    <div className="flex items-baseline justify-between gap-3 text-sm">
+                      <span className="truncate text-slate-200">{s.sector ?? 'n/a'}</span>
+                      <span className="shrink-0 tabular-nums text-slate-400">{s.weightage?.toFixed(2) ?? '–'}%</span>
+                    </div>
+                    <div className="mt-1 h-1 overflow-hidden rounded-full bg-slate-800">
+                      <div className="h-full rounded-full bg-indigo-500/70" style={{ width: `${((s.weightage ?? 0) / maxSector) * 100}%` }} />
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+
+          <p className="mt-5 text-xs text-slate-500">
+            Source: {data.source}{data.as_of ? ` · as of ${data.as_of.slice(0, 10)}` : ''}
+            {data.stale ? ' · showing last cached copy' : ''}
+          </p>
+        </>
+      )}
+    </div>
+  )
+}
+
+function Legend({ color, label, v }: { color: string; label: string; v: number }) {
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <span className={`h-2 w-2 rounded-full ${color}`} />
+      {label} {v.toFixed(1)}%
+    </span>
   )
 }
 

@@ -192,6 +192,29 @@ Four derived-metric endpoints registered at `/schemes/:code/*`. All read from `n
 
 Pure math lives in `lib/finance.js` (no I/O, trivially unit-testable). Tests in `api/test/finance.test.js` (Node built-in test runner: `npm test`).
 
+### Fund Holdings — `api/routes/holdings.js` + `api/lib/finapi.js`
+
+`GET /schemes/:code/holdings` returns a fund's current portfolio allocation: individual
+security holdings with weightage, sector breakdown, equity/debt/cash split, market-cap tilt,
+and concentration stats. This is the **one route that reaches an external source at request
+time**: scheme identity comes from our DB, the allocation is proxied from
+**finapi.upvaly.com** (`/api/mf/scheme-code/{code}`), which is keyed by the same AMFI scheme
+codes we store (no mapping needed).
+
+finapi is **rate-limited** (~120 req/window per endpoint), so we never bulk-fetch. Instead
+`lib/queries.js getHoldings()` does a **lazy DB-backed cache** in the `fund_holdings` table:
+first request for a fund fetches from finapi and upserts; requests within `HOLDINGS_TTL_HOURS`
+(default 24h) serve from our DB with zero finapi calls. Failure handling:
+- finapi 404 (no portfolio) → **negative-cached** (`{"missing":true}`) so we don't re-poke it;
+  response returns scheme identity with null allocation + a `note`.
+- finapi 429/timeout → serve the last cached copy with `stale: true` if we have one, else `503`.
+
+`lib/finapi.js` holds the client plus pure, unit-tested helpers `num()` (parses
+`"₹2,42,065.01 Cr"` → `242065.01`) and `normalizeHoldings()`. Tests in
+`api/test/holdings.test.js` (pure normalization + route/cache behavior with `fetch` stubbed).
+Edge cache for this route is **1h** (vs 60s for NAV routes) since portfolios move monthly and
+no sibling URL exposes the same fact.
+
 ### MCP Server — `api/routes/mcp.js` (+ `api/lib/queries.js`)
 
 Exposes the read-only data to AI agents over the Model Context Protocol at `POST /mcp`
@@ -203,7 +226,7 @@ the parsed body to the transport. **No new serverless function** (rides inside
 `api/vercel.js`), **no `vercel.json` change**, **no Anthropic dependency** (uses
 `@modelcontextprotocol/sdk` — the agent-server protocol, not the Claude API).
 
-11 read-only tools (search/detail/ISIN/NAV/latest + returns/rolling/risk/sip + catalogs),
+12 read-only tools (search/detail/ISIN/NAV/latest + returns/rolling/risk/sip + holdings + catalogs),
 each with a zod `outputSchema` returning `structuredContent`. `/sync-nav` is **not**
 exposed. Tools call `lib/queries.js` directly — the **shared data-access layer** that the
 REST routes also use, so SQL lives once and the two surfaces can't drift. Open auth
@@ -357,7 +380,13 @@ schemes            (scheme_code PK, scheme_name, fund_house_id→fund_houses,
                     isin_div_reinvestment, last_synced_at TEXT)
 nav_history        (scheme_code→schemes CASCADE, nav_date TEXT, nav REAL,
                     PRIMARY KEY (scheme_code, nav_date))
+fund_holdings      (scheme_code PK→schemes CASCADE, fetched_at TEXT, holdings_date TEXT,
+                    payload TEXT)   ← lazy per-scheme cache of finapi portfolio allocation
 ```
+
+`fund_holdings.payload` is the normalized allocation JSON as TEXT in **both** backends (not
+jsonb) so the SQLite/Postgres adapters read/write it identically; `{"missing":true}` is the
+negative-cache marker. Lazily filled on demand by `GET /schemes/:code/holdings`, never seeded.
 
 **Indexes (both backends):**
 - `idx_nav_history_scheme_date` on `nav_history(scheme_code, nav_date DESC)`
@@ -432,8 +461,15 @@ GET /schemes/:code/sip?amount=5000&from=YYYY-MM-DD&to=YYYY-MM-DD
     months, total_invested, current_value, absolute_gain, xirr }
    404 → { error: 'No NAV data found for scheme' }
 
+GET /schemes/:code/holdings                       ← proxied from finapi, cached in fund_holdings
+→ { scheme_code, scheme_name, fund_house, category, as_of,
+    asset_allocation, market_cap, concentration, holdings: [...], sectors: [...],
+    source: 'finapi.upvaly.com', cached }         ← allocation null + note if finapi has none
+   404 → { error: 'Scheme not found' }
+   503 → { error: 'Holdings temporarily unavailable (...)' }   ← finapi down + no cache
+
 POST /mcp
-→ MCP Streamable HTTP endpoint for AI agents (11 read-only tools)
+→ MCP Streamable HTTP endpoint for AI agents (12 read-only tools)
 
 POST /sync-nav
 Headers: Authorization: Bearer <SYNC_NAV_SECRET>
@@ -539,6 +575,9 @@ single most impactful latency fix for Indian users.
 | `MFAPI_BASE` | `https://api.mfapi.in` | Seed data source |
 | `AXIOM_TOKEN` | _unset_ | Axiom ingest token. Analytics hook is skipped if unset. |
 | `AXIOM_DATASET` | _unset_ | Axiom dataset name (e.g. `market-data-api`). |
+| `FINAPI_BASE` | `https://finapi.upvaly.com` | Holdings source for `/schemes/:code/holdings`. |
+| `HOLDINGS_TTL_HOURS` | `24` | How long a cached `fund_holdings` row is served before refetching finapi. |
+| `FINAPI_TIMEOUT_MS` | `5000` | Per-request timeout on the finapi fetch. |
 
 ### `frontend/.env`
 | Variable | Default | Notes |
@@ -585,7 +624,10 @@ npm run fetch:logos       # from repo root
 ```
 [ ] npm run seed               — market-data-api.db seeded locally (NAV_YEARS=5)
 [ ] CockroachDB Serverless     — cluster created, database created, user + password set
-[ ] schema.postgres.sql run    — 4 tables + indexes created (CockroachDB SQL shell or client)
+[ ] schema.postgres.sql run    — 5 tables + indexes created (CockroachDB SQL shell or client)
+[ ] fund_holdings on prod      — for the holdings feature on an ALREADY-migrated cluster, run the
+                                 CREATE TABLE fund_holdings block from schema.postgres.sql once
+                                 (idempotent; lazily filled at request time, nothing to migrate)
 [ ] DATABASE_URL in api/.env   — cockroachdb connection string, sslmode=verify-full
 [ ] npm run migrate:cockroach  — ~10-15 min, 9M+ nav_history rows copied (idempotent)
 [ ] SYNC_NAV_SECRET generated  — node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"

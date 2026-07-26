@@ -31,6 +31,17 @@ CREATE TABLE IF NOT EXISTS nav_history (
     PRIMARY KEY (scheme_code, nav_date)
 );
 
+-- Lazy on-demand cache of fund portfolio holdings, fetched from finapi.upvaly.com
+-- (rate-limited, so never bulk-filled). One row per scheme, refreshed after a TTL.
+-- payload is the normalized allocation JSON, or {"missing":true} when finapi has
+-- no portfolio for the scheme (negative cache, so we don't re-hit finapi for it).
+CREATE TABLE IF NOT EXISTS fund_holdings (
+    scheme_code   INTEGER  PRIMARY KEY REFERENCES schemes(scheme_code) ON DELETE CASCADE,
+    fetched_at    TEXT     NOT NULL,   -- ISO 8601 timestamp of the finapi fetch
+    holdings_date TEXT,                -- portfolio as-of date, if known
+    payload       TEXT     NOT NULL    -- normalized allocation JSON
+);
+
 CREATE INDEX IF NOT EXISTS idx_nav_history_scheme_date ON nav_history (scheme_code, nav_date DESC);
 CREATE INDEX IF NOT EXISTS idx_schemes_fund_house      ON schemes (fund_house_id);
 CREATE INDEX IF NOT EXISTS idx_schemes_category        ON schemes (scheme_category_id);

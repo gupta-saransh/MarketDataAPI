@@ -21,7 +21,7 @@ import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/
 import {
   listFundHouses, listCategories,
   searchSchemes, getSchemeByCode, getSchemeByIsin, getNavHistory, getLatestNav,
-  getReturns, getRolling, getRisk, getSip,
+  getReturns, getRolling, getRisk, getSip, getHoldings,
 } from '../lib/queries.js'
 
 // CockroachDB returns integer columns (scheme_code, ids) as strings; SQLite as
@@ -74,6 +74,38 @@ const period = z.object({
 }).nullable()
 
 const window = z.object({ from: z.string(), to: z.string(), return_pct: z.number() })
+
+// Holdings allocation numbers are nullable (a scheme may have no portfolio data).
+const alloc = z.number().nullable()
+const holdingsShape = {
+  scheme_code: id,
+  scheme_name: z.string(),
+  fund_house: z.string().nullable(),
+  category: z.string().nullable(),
+  broad_category: z.string().nullable(),
+  as_of: z.string().nullable(),
+  asset_allocation: z.object({ equity: alloc, debt: alloc, cash: alloc, other: alloc }).nullable(),
+  market_cap: z.object({ large: alloc, mid: alloc, small: alloc, others: alloc }).nullable(),
+  concentration: z.object({
+    number_of_holdings: z.number().nullable(),
+    top3_sector_weight: alloc,
+    top5_stocks_weight: alloc,
+    top10_stocks_weight: alloc,
+    average_market_cap_cr: alloc,
+  }).nullable(),
+  holdings: z.array(z.object({
+    name: z.string().nullable(), sector: z.string().nullable(),
+    weightage: alloc, market_value_cr: alloc, change_1m: alloc,
+  })).nullable(),
+  sectors: z.array(z.object({
+    sector: z.string().nullable(),
+    weightage: alloc, market_value_cr: alloc, change_1m: alloc,
+  })).nullable(),
+  source: z.string(),
+  cached: z.boolean(),
+  stale: z.boolean().optional(),
+  note: z.string().optional(),
+}
 
 // ── tool registration ─────────────────────────────────────────
 
@@ -289,6 +321,26 @@ function buildServer() {
     if (!res.ok) return fail(res.error)
     const s = res.data.sip
     return ok(res.data, `${res.data.scheme_name}: invested ${s.total_invested}, now worth ${s.current_value.toFixed(0)} (XIRR ${s.xirr_pct?.toFixed(2) ?? 'n/a'}%).`)
+  })
+
+  server.registerTool('get_holdings', {
+    title: 'Get portfolio holdings',
+    description:
+      "Get a fund's current portfolio allocation: individual security holdings with weightage, " +
+      'sector breakdown, equity/debt/cash split, market-cap tilt, and concentration stats. Use ' +
+      'when the user asks what a fund holds, its top holdings, sector exposure, or asset ' +
+      'allocation, or to compare the overlap between two funds. Portfolios are disclosed roughly ' +
+      'monthly. Allocation fields are null when no portfolio data is available for the scheme.',
+    inputSchema: { scheme_code: schemeCode },
+    outputSchema: holdingsShape,
+  }, async ({ scheme_code }) => {
+    const res = await getHoldings(scheme_code)
+    if (!res.ok) return fail(res.error)
+    const d = res.data
+    const summary = Array.isArray(d.holdings) && d.holdings.length
+      ? `${d.scheme_name}: ${d.holdings.length} holdings; top — ${d.holdings.slice(0, 3).map((h) => `${h.name} ${h.weightage}%`).join(', ')}.`
+      : `${d.scheme_name}: no portfolio data available.`
+    return ok(d, summary)
   })
 
   server.registerTool('list_fund_houses', {

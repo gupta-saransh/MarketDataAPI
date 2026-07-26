@@ -24,8 +24,9 @@
 
 - **REST API** — search schemes, scheme/ISIN detail, NAV history + latest NAV.
 - **Analytics** — trailing & rolling returns, risk (volatility / drawdown / Sharpe), SIP + XIRR.
+- **Holdings** — current portfolio allocation (top securities, sector mix, equity/debt/cash), proxied on demand from finapi.upvaly.com and cached per scheme.
 - **Web explorer** — pick an endpoint, fill params, run, see the response (renders `/openapi.json`).
-- **MCP server** — the same data as 11 tools for AI agents (see [MCP.md](MCP.md)).
+- **MCP server** — the same data as 12 tools for AI agents (see [MCP.md](MCP.md)).
 - **Google Sheets functions** — `=MF_NAV(101762)` and friends (`frontend/public/excel-addin/google-sheets.js`).
 
 ## For AI agents (MCP)

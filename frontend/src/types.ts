@@ -116,6 +116,46 @@ export interface SipResp {
   }
 }
 
+// GET /schemes/:code/holdings response (allocation proxied from finapi).
+export interface HoldingRow {
+  name: string | null
+  sector: string | null
+  weightage: number | null
+  market_value_cr: number | null
+  change_1m: number | null
+}
+
+export interface SectorRow {
+  sector: string | null
+  weightage: number | null
+  market_value_cr: number | null
+  change_1m: number | null
+}
+
+export interface HoldingsResp {
+  scheme_code: string | number
+  scheme_name: string
+  fund_house: string | null
+  category: string | null
+  broad_category: string | null
+  as_of: string | null
+  asset_allocation: { equity: number | null; debt: number | null; cash: number | null; other: number | null } | null
+  market_cap: { large: number | null; mid: number | null; small: number | null; others: number | null } | null
+  concentration: {
+    number_of_holdings: number | null
+    top3_sector_weight: number | null
+    top5_stocks_weight: number | null
+    top10_stocks_weight: number | null
+    average_market_cap_cr: number | null
+  } | null
+  holdings: HoldingRow[] | null
+  sectors: SectorRow[] | null
+  source: string
+  cached: boolean
+  stale?: boolean
+  note?: string
+}
+
 // GET /schemes/:code/rolling response.
 export interface RollingResp {
   scheme_code: string | number

@@ -17,6 +17,7 @@ import { sql } from '../db/index.js'
 import {
   trailingReturns, rollingReturns, riskMetrics, simulateSip, parseWindow,
 } from './finance.js'
+import { fetchHoldings, FINAPI_SOURCE } from './finapi.js'
 
 // Pagination bounds — keep result sets small and predictable.
 const DEFAULT_LIMIT = 20
@@ -248,4 +249,86 @@ export async function getSip(code, { amount, from, to, day } = {}) {
   const sip = simulateSip(loaded.series, { amount: amt, day: dayN, from: from ?? null, to: to ?? null })
   if (!sip) return { ok: false, status: 400, error: 'No SIP installments fall within the available data range' }
   return { ok: true, data: { scheme_code: c, scheme_name: loaded.scheme_name, frequency: 'monthly', sip } }
+}
+
+// ── holdings (portfolio allocation, proxied + cached from finapi) ──
+
+const HOLDINGS_TTL_MS = Number(process.env.HOLDINGS_TTL_HOURS ?? 24) * 3600 * 1000
+
+const HOLDINGS_GET = `SELECT fetched_at, payload FROM fund_holdings WHERE scheme_code = ?`
+const HOLDINGS_UPSERT = `
+  INSERT INTO fund_holdings (scheme_code, fetched_at, payload)
+  VALUES (?, ?, ?)
+  ON CONFLICT (scheme_code) DO UPDATE SET fetched_at = excluded.fetched_at, payload = excluded.payload
+`
+
+// Negative-cache marker: finapi has no portfolio for this scheme. Stored so we
+// don't re-hit the (rate-limited) upstream for the same unsupported scheme.
+const MISSING = { missing: true }
+
+// Shape returned when there is no allocation data to show.
+const NULL_ALLOCATION = {
+  asset_allocation: null, market_cap: null, concentration: null, holdings: null, sectors: null,
+}
+
+// payload is TEXT in SQLite and (currently) TEXT in Postgres, but tolerate a
+// pre-parsed object in case the column is ever switched to jsonb.
+function parsePayload(raw) {
+  return typeof raw === 'string' ? JSON.parse(raw) : raw
+}
+
+function serveCached(identity, row) {
+  const payload = parsePayload(row.payload)
+  if (payload?.missing) {
+    return { ...identity, as_of: row.fetched_at, ...NULL_ALLOCATION, source: FINAPI_SOURCE,
+             cached: true, note: 'No portfolio data available for this scheme.' }
+  }
+  return { ...identity, as_of: row.fetched_at, ...payload, source: FINAPI_SOURCE, cached: true }
+}
+
+/**
+ * Current portfolio allocation for a scheme. Scheme identity comes from our DB;
+ * the allocation is proxied from finapi and cached in fund_holdings.
+ *
+ * Flow: fresh cache → serve it (no finapi call). Else fetch finapi:
+ *   success → upsert + serve; finapi 404 → negative-cache + serve null allocation;
+ *   finapi 429/timeout → serve stale cache if any, else 503.
+ */
+export async function getHoldings(code) {
+  const c = Number(code)
+  const scheme = await sql.get(BY_CODE, [c])
+  if (!scheme) return { ok: false, status: 404, error: 'Scheme not found' }
+
+  const identity = {
+    scheme_code:    scheme.scheme_code,
+    scheme_name:    scheme.scheme_name,
+    fund_house:     scheme.fund_house,
+    category:       scheme.category,
+    broad_category: scheme.broad_category,
+  }
+
+  const cached = await sql.get(HOLDINGS_GET, [c])
+  const fresh  = cached && (Date.now() - Date.parse(cached.fetched_at) < HOLDINGS_TTL_MS)
+  if (fresh) return { ok: true, data: serveCached(identity, cached) }
+
+  const result = await fetchHoldings(c)
+  const now = new Date().toISOString()
+
+  if (result.ok) {
+    const payload = JSON.stringify(result.data)
+    try { await sql.run(HOLDINGS_UPSERT, [c, now, payload]) } catch { /* cache write is best-effort */ }
+    return { ok: true, data: { ...identity, as_of: now, ...result.data, source: FINAPI_SOURCE, cached: false } }
+  }
+
+  // finapi says it has no portfolio for this scheme — negative-cache and return nulls.
+  if (result.status === 404) {
+    try { await sql.run(HOLDINGS_UPSERT, [c, now, JSON.stringify(MISSING)]) } catch { /* best-effort */ }
+    return { ok: true, data: { ...identity, as_of: now, ...NULL_ALLOCATION, source: FINAPI_SOURCE,
+             cached: false, note: 'No portfolio data available for this scheme.' } }
+  }
+
+  // finapi errored (rate limit / timeout). Stale data beats no data.
+  if (cached) return { ok: true, data: { ...serveCached(identity, cached), stale: true } }
+
+  return { ok: false, status: 503, error: `Holdings temporarily unavailable (${result.error})` }
 }

@@ -427,5 +427,58 @@ export const openapi = {
         },
       },
     },
+
+    '/schemes/{code}/holdings': {
+      get: {
+        tags: ['Schemes'],
+        summary: 'Portfolio holdings & allocation',
+        description:
+          'Current portfolio allocation for a scheme: individual security holdings with weightage, '
+          + 'sector breakdown, equity/debt/cash split, market-cap tilt, and concentration stats. '
+          + 'Scheme identity is served from this API; the allocation is sourced on demand from '
+          + 'finapi.upvaly.com and cached per scheme (portfolios are disclosed ~monthly). '
+          + 'If finapi has no portfolio for the scheme, allocation fields are null with a note. '
+          + '`cached` indicates a cache hit; `stale: true` means upstream was unreachable and the '
+          + 'last cached copy was served.',
+        parameters: [
+          { name: 'code', in: 'path', required: true, description: 'Scheme code', schema: { type: 'integer' }, example: 101762 },
+        ],
+        responses: {
+          200: {
+            description: 'Portfolio allocation',
+            content: {
+              'application/json': {
+                example: {
+                  scheme_code: 101762,
+                  scheme_name: 'HDFC Flexi Cap Fund - Growth Plan',
+                  fund_house: 'HDFC Mutual Fund',
+                  category: 'Equity Scheme - Flexi Cap Fund',
+                  broad_category: 'Equity Scheme',
+                  as_of: '2026-07-25T18:40:00.000Z',
+                  asset_allocation: { equity: 96.24, debt: 0.48, cash: 3.28, other: 0 },
+                  market_cap: { large: 72.18, mid: 13.74, small: 9.35, others: 4.73 },
+                  concentration: {
+                    number_of_holdings: 78, top3_sector_weight: 64.96,
+                    top5_stocks_weight: 30.56, top10_stocks_weight: 46.56,
+                    average_market_cap_cr: 242065.01,
+                  },
+                  holdings: [
+                    { name: 'ICICI Bank Ltd', sector: 'Financial Services', weightage: 9.18, market_value_cr: 9771.49, change_1m: -0.67 },
+                    { name: 'Axis Bank Ltd', sector: 'Financial Services', weightage: 6.84, market_value_cr: 7280.97, change_1m: 0 },
+                  ],
+                  sectors: [
+                    { sector: 'Financial Services', weightage: 36.28, market_value_cr: 38637.3, change_1m: 471.4 },
+                  ],
+                  source: 'finapi.upvaly.com',
+                  cached: false,
+                },
+              },
+            },
+          },
+          404: { description: 'Scheme not found', content: { 'application/json': { example: { error: 'Scheme not found' } } } },
+          503: { description: 'Upstream holdings source temporarily unavailable', content: { 'application/json': { example: { error: 'Holdings temporarily unavailable (finapi rate limit reached)' } } } },
+        },
+      },
+    },
   },
 }
