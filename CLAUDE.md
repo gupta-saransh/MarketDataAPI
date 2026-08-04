@@ -49,7 +49,7 @@ market-data-api/
 ├── vercel.json                   ← single Vercel project: builds api fn + frontend, routes /api/*
 ├── .github/
 │   └── workflows/
-│       ├── sync-nav.yml          ← GitHub Actions cron: POST /api/sync-nav 5× per day (IST)
+│       ├── sync-nav.yml          ← GitHub Actions cron: POST /api/sync-nav hourly (on the hour UTC)
 │       └── archive-nav.yml       ← Daily 11:30 PM IST: commit NAVAll.txt → nav-archive/ (DR backup)
 ├── nav-archive/                  ← dated raw NAVAll.txt snapshots (DD-MM-YYYY.txt) for rebuild
 ├── scripts/
@@ -518,15 +518,10 @@ to `bom1` dramatically reduces latency for Indian users and Google Sheets caller
 
 ## GitHub Actions — NAV Sync (`sync-nav.yml`)
 
-Calls `POST /api/sync-nav` 5× per day. Schedules in IST (UTC+5:30):
-
-| IST time | UTC cron |
-|---|---|
-| 10:00 AM | `30 4 * * *` |
-| 4:00 PM | `30 10 * * *` |
-| 7:00 PM | `30 13 * * *` |
-| 10:00 PM | `30 16 * * *` |
-| 11:30 PM | `0 18 * * *` |
+Calls `POST /api/sync-nav` **hourly** (`cron: '0 * * * *'`, on the hour UTC). AMFI publishes
+NAV once per business day, so most runs are idempotent no-ops (`ON CONFLICT DO NOTHING`); the
+hourly cadence just picks up the daily file soon after it lands. GitHub may delay scheduled
+runs under load, so treat it as "about hourly".
 
 Required GitHub secrets: `SYNC_NAV_SECRET`, `VERCEL_APP_URL`.
 Also supports `workflow_dispatch` for manual triggers.
@@ -729,4 +724,4 @@ Ideas discussed, prioritized by impact vs effort:
 - Fund Visualizer: loads at `#funds`, search works, chart renders with drag select, risk tiles adjust to range toggle.
 - AMC logos: 31/41 self-hosted; remaining 10 fall back to colored initial.
 - Google Sheets: latency improved significantly after moving Vercel region to bom1 (Mumbai).
-- GitHub Actions: sync-nav fires 5x/day; archive-nav commits NAVAll.txt daily.
+- GitHub Actions: sync-nav fires hourly; archive-nav commits NAVAll.txt daily.
