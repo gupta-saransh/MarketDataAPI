@@ -150,7 +150,6 @@ export interface HoldingsResp {
   } | null
   holdings: HoldingRow[] | null
   sectors: SectorRow[] | null
-  source: string
   cached: boolean
   stale?: boolean
   note?: string

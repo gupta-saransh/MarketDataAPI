@@ -435,11 +435,10 @@ export const openapi = {
         description:
           'Current portfolio allocation for a scheme: individual security holdings with weightage, '
           + 'sector breakdown, equity/debt/cash split, market-cap tilt, and concentration stats. '
-          + 'Scheme identity is served from this API; the allocation is sourced on demand from '
-          + 'finapi.upvaly.com and cached per scheme (portfolios are disclosed ~monthly). '
-          + 'If finapi has no portfolio for the scheme, allocation fields are null with a note. '
-          + '`cached` indicates a cache hit; `stale: true` means upstream was unreachable and the '
-          + 'last cached copy was served.',
+          + 'Portfolios are disclosed roughly monthly, so this data is fetched on demand and cached '
+          + 'per scheme. When no portfolio is available for a scheme, the allocation fields are null '
+          + 'and a note explains why. The "cached" flag indicates a cache hit, and "stale": true '
+          + 'means the latest saved copy was served because a refresh could not be completed.',
         parameters: [
           { name: 'code', in: 'path', required: true, description: 'Scheme code', schema: { type: 'integer' }, example: 101762 },
         ],
@@ -469,14 +468,13 @@ export const openapi = {
                   sectors: [
                     { sector: 'Financial Services', weightage: 36.28, market_value_cr: 38637.3, change_1m: 471.4 },
                   ],
-                  source: 'finapi.upvaly.com',
                   cached: false,
                 },
               },
             },
           },
           404: { description: 'Scheme not found', content: { 'application/json': { example: { error: 'Scheme not found' } } } },
-          503: { description: 'Upstream holdings source temporarily unavailable', content: { 'application/json': { example: { error: 'Holdings temporarily unavailable (finapi rate limit reached)' } } } },
+          503: { description: 'Holdings source temporarily unavailable', content: { 'application/json': { example: { error: 'Holdings are temporarily unavailable. Please try again shortly.' } } } },
         },
       },
     },

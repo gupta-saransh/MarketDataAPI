@@ -101,7 +101,6 @@ const holdingsShape = {
     sector: z.string().nullable(),
     weightage: alloc, market_value_cr: alloc, change_1m: alloc,
   })).nullable(),
-  source: z.string(),
   cached: z.boolean(),
   stale: z.boolean().optional(),
   note: z.string().optional(),

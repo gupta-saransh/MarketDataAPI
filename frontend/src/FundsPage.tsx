@@ -538,7 +538,7 @@ function HoldingsCard({ code }: { code: string }) {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-sm font-semibold text-white">Portfolio holdings</h2>
-          <p className="mt-0.5 text-xs text-slate-400">What the fund owns right now. Disclosed roughly monthly.</p>
+          <p className="mt-0.5 text-xs text-slate-400">The fund's current top holdings and sector mix, updated roughly monthly.</p>
         </div>
         {state === 'ok' && data?.concentration?.number_of_holdings != null && (
           <span className="text-xs text-slate-500">{data.concentration.number_of_holdings} holdings</span>
@@ -609,8 +609,8 @@ function HoldingsCard({ code }: { code: string }) {
           </div>
 
           <p className="mt-5 text-xs text-slate-500">
-            Source: {data.source}{data.as_of ? ` · as of ${data.as_of.slice(0, 10)}` : ''}
-            {data.stale ? ' · showing last cached copy' : ''}
+            {data.as_of ? `Updated ${data.as_of.slice(0, 10)}` : 'Portfolio allocation'}
+            {data.stale ? ' · showing the latest saved copy' : ''}
           </p>
         </>
       )}

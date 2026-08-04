@@ -17,7 +17,7 @@ import { sql } from '../db/index.js'
 import {
   trailingReturns, rollingReturns, riskMetrics, simulateSip, parseWindow,
 } from './finance.js'
-import { fetchHoldings, FINAPI_SOURCE } from './finapi.js'
+import { fetchHoldings } from './finapi.js'
 
 // Pagination bounds — keep result sets small and predictable.
 const DEFAULT_LIMIT = 20
@@ -280,10 +280,10 @@ function parsePayload(raw) {
 function serveCached(identity, row) {
   const payload = parsePayload(row.payload)
   if (payload?.missing) {
-    return { ...identity, as_of: row.fetched_at, ...NULL_ALLOCATION, source: FINAPI_SOURCE,
+    return { ...identity, as_of: row.fetched_at, ...NULL_ALLOCATION,
              cached: true, note: 'No portfolio data available for this scheme.' }
   }
-  return { ...identity, as_of: row.fetched_at, ...payload, source: FINAPI_SOURCE, cached: true }
+  return { ...identity, as_of: row.fetched_at, ...payload, cached: true }
 }
 
 /**
@@ -317,18 +317,18 @@ export async function getHoldings(code) {
   if (result.ok) {
     const payload = JSON.stringify(result.data)
     try { await sql.run(HOLDINGS_UPSERT, [c, now, payload]) } catch { /* cache write is best-effort */ }
-    return { ok: true, data: { ...identity, as_of: now, ...result.data, source: FINAPI_SOURCE, cached: false } }
+    return { ok: true, data: { ...identity, as_of: now, ...result.data, cached: false } }
   }
 
-  // finapi says it has no portfolio for this scheme — negative-cache and return nulls.
+  // upstream says it has no portfolio for this scheme — negative-cache and return nulls.
   if (result.status === 404) {
     try { await sql.run(HOLDINGS_UPSERT, [c, now, JSON.stringify(MISSING)]) } catch { /* best-effort */ }
-    return { ok: true, data: { ...identity, as_of: now, ...NULL_ALLOCATION, source: FINAPI_SOURCE,
+    return { ok: true, data: { ...identity, as_of: now, ...NULL_ALLOCATION,
              cached: false, note: 'No portfolio data available for this scheme.' } }
   }
 
-  // finapi errored (rate limit / timeout). Stale data beats no data.
+  // upstream errored (rate limit / timeout). Stale data beats no data.
   if (cached) return { ok: true, data: { ...serveCached(identity, cached), stale: true } }
 
-  return { ok: false, status: 503, error: `Holdings temporarily unavailable (${result.error})` }
+  return { ok: false, status: 503, error: 'Holdings are temporarily unavailable. Please try again shortly.' }
 }

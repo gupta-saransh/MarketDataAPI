@@ -464,9 +464,11 @@ GET /schemes/:code/sip?amount=5000&from=YYYY-MM-DD&to=YYYY-MM-DD
 GET /schemes/:code/holdings                       ← proxied from finapi, cached in fund_holdings
 → { scheme_code, scheme_name, fund_house, category, as_of,
     asset_allocation, market_cap, concentration, holdings: [...], sectors: [...],
-    source: 'finapi.upvaly.com', cached }         ← allocation null + note if finapi has none
+    cached }                                       ← allocation null + note if finapi has none
    404 → { error: 'Scheme not found' }
-   503 → { error: 'Holdings temporarily unavailable (...)' }   ← finapi down + no cache
+   503 → { error: 'Holdings are temporarily unavailable...' }   ← finapi down + no cache
+   NOTE: the finapi vendor is never named in any public response, the OpenAPI spec,
+         or the frontend — only in these internal docs and server-side code.
 
 POST /mcp
 → MCP Streamable HTTP endpoint for AI agents (12 read-only tools)

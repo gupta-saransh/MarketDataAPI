@@ -131,8 +131,8 @@ test('GET /schemes/:code/holdings fetches, normalizes, and caches', async () => 
   assert.equal(b1.scheme_name, 'HDFC Flexi Cap Fund - Growth Plan') // identity from our DB
   assert.equal(b1.holdings[0].name, 'ICICI Bank Ltd')
   assert.equal(b1.asset_allocation.equity, 96.24)
-  assert.equal(b1.source, 'finapi.upvaly.com')
   assert.equal(b1.cached, false)
+  assert.equal(b1.source, undefined) // upstream vendor is not exposed publicly
   assert.equal(fetchCalls, 1)
 
   // Second call is served from the DB cache — finapi is NOT hit again.

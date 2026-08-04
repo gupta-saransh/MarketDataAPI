@@ -18,39 +18,31 @@ export default function Header() {
     : health.ok ? `online${health.driver ? ` · ${health.driver}` : ''}` : 'offline'
 
   return (
-    <header className="border-b border-slate-800/80 bg-slate-950">
-      <div className="mx-auto max-w-5xl px-6 py-5">
-        <div className="flex items-center justify-between gap-4">
-          <div className="flex items-center gap-4">
-            <a
-              href="#"
-              className="text-sm text-slate-400 transition-colors hover:text-white"
-            >
-              ← Home
-            </a>
-            <a
-              href="#funds"
-              className="text-sm text-slate-400 transition-colors hover:text-white"
-            >
-              Visualizer
-            </a>
-            <div>
-              <h1 className="text-xl font-semibold tracking-tight text-white">
-                Market Data API
-              </h1>
-              <p className="text-xs text-slate-500">
-                API Reference
-              </p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2 rounded-full border border-slate-800 bg-slate-900 px-3 py-1.5 text-sm">
-            <span className={`h-2.5 w-2.5 rounded-full ${dot}`} />
-            <span className="text-slate-300">{label}</span>
+    <header>
+      {/* Nav bar — same structure as the landing page for a consistent feel */}
+      <nav className="border-b border-slate-800/80">
+        <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-4">
+          <a href="#" className="font-semibold tracking-tight text-white">Market Data API</a>
+          <div className="flex items-center gap-5 text-sm">
+            <a href="#" className="text-slate-400 transition-colors hover:text-white">Home</a>
+            <a href="#funds" className="text-slate-400 transition-colors hover:text-white">Fund Visualizer</a>
+            <span className="flex items-center gap-2 rounded-full border border-slate-800 bg-slate-900 px-3 py-1 text-xs">
+              <span className={`h-2 w-2 rounded-full ${dot}`} />
+              <span className="text-slate-300">{label}</span>
+            </span>
           </div>
         </div>
-        <div className="mt-3 flex items-center gap-2 text-sm">
+      </nav>
+
+      {/* Page heading */}
+      <div className="mx-auto max-w-5xl px-6 pb-8 pt-12">
+        <h1 className="text-4xl font-bold tracking-tight text-white">API Reference</h1>
+        <p className="mt-3 max-w-2xl text-base leading-relaxed text-slate-400">
+          Every endpoint, with live try-it panels and example responses.
+        </p>
+        <div className="mt-5 inline-flex items-center gap-2 text-sm">
           <span className="text-slate-500">Base URL</span>
-          <code className="rounded bg-slate-900 px-2 py-1 font-mono text-slate-300">{API_BASE}</code>
+          <code className="rounded-md bg-slate-900 px-2.5 py-1 font-mono text-slate-300 ring-1 ring-slate-800">{API_BASE}</code>
         </div>
       </div>
     </header>
