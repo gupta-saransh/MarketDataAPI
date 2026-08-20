@@ -13,7 +13,10 @@
       "Bash(python -c ' *)",
       "Bash(curl -sS -o - -w \"\\\\nHTTP:%{http_code}\\\\n\" \"https://finapi.upvaly.com/api/mf/scheme-code/99999999\")",
       "Bash(node --experimental-sqlite -e ' *)",
-      "Bash(DATABASE_URL='' DB_PATH=./market-data-api.db AXIOM_TOKEN='' AXIOM_DATASET='' node --experimental-sqlite -e ' *)"
+      "Bash(DATABASE_URL='' DB_PATH=./market-data-api.db AXIOM_TOKEN='' AXIOM_DATASET='' node --experimental-sqlite -e ' *)",
+      "Bash(curl -s https://portal.amfiindia.com/spages/NAVAll.txt -o navall.txt)",
+      "Bash(awk -F';' '{print NF}' navall.txt)",
+      "Bash(awk -F';' 'NF>=7' navall.txt)"
     ]
   }
 }

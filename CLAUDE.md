@@ -173,7 +173,16 @@ These three hardening layers live in `app.js` and `routes/schemes.js`:
 
 ### Route: POST /sync-nav (`api/routes/sync.js`)
 
-Fetches AMFI's `NAVAll.txt` (one HTTP call, ~1 MB), parses semicolon-delimited lines, filters to known `scheme_code`s, and batch-upserts in CHUNK=500 rows with `ON CONFLICT(scheme_code, nav_date) DO NOTHING`.
+Fetches AMFI's `NAVAll.txt` (one HTTP call, ~1.5 MB), parses semicolon-delimited lines, filters to known `scheme_code`s, and batch-upserts in CHUNK=500 rows with `ON CONFLICT(scheme_code, nav_date) DO NOTHING`.
+
+**AMFI's file layout changed in Aug 2026** — `Plan` and `Option` columns were inserted, taking it
+from 6 fields to 8 and moving NAV/date from index 4-5 to 6-7. `parseNavAll()` (exported from
+`sync.js`, unit-tested in `test/sync.test.js`) reads **NAV and date as the last two fields**, so it
+handles both layouts and the older `nav-archive/` snapshots. Two traps this route learned the hard
+way: `Number('')` is `0`, not `NaN`, so an empty NAV field passes a naive `isNaN()` guard; and a
+lenient date parser silently returns garbage like `'undefined-NaN-00'` instead of throwing. Both
+fed invalid values into `nav_date date NOT NULL`, failing the whole 500-row batch and returning
+**500 on every call**. NAV is now validated as `> 0` and the date must match `DD-Mon-YYYY`.
 
 Auth: `Authorization: Bearer <SYNC_NAV_SECRET>`. Fails closed: if `SYNC_NAV_SECRET` is unset,
 the endpoint returns 503 (never runs unauthenticated). Token comparison hashes both sides with
