@@ -30,6 +30,51 @@ export function num(v) {
   return Number.isFinite(n) ? n : null
 }
 
+export const PRECIOUS_METALS_SECTOR = 'Gold & Silver'
+
+// Gold and silver ETFs / FoFs arrive from upstream with no sector at all, so
+// downstream they fall in with the unclassified cash-and-debt bucket. Bullion is
+// its own asset class, not cash, so give it its own sector.
+//
+// The \b anchors are load-bearing: they keep real equities whose names merely
+// start with those letters out (Goldman Sachs, Goldiam International, Golden
+// Tobacco) while still matching 'SBI Gold ETF', 'Gold FoF', 'ETF Gold BeES'.
+const PRECIOUS_METAL_RE = /\b(gold|silver)\b/i
+
+const round2 = (n) => Math.round(n * 100) / 100
+
+/** Sector a holding belongs in, overriding upstream for bullion. */
+export function sectorForHolding(name, sector = null) {
+  return PRECIOUS_METAL_RE.test(name ?? '') ? PRECIOUS_METALS_SECTOR : (sector ?? null)
+}
+
+/**
+ * Fold reclassified bullion holdings into the sector list.
+ *
+ * Upstream's sector table only covers equities, so once gold/silver holdings get
+ * a sector they still have no row to land in. Sum them into one, and splice it
+ * into the (weight-descending) list so the sector mix stays sorted.
+ * Both inputs are already-normalized rows; returns a new array.
+ */
+export function withPreciousMetalsSector(holdings, sectors) {
+  const metals = holdings.filter((h) => h.sector === PRECIOUS_METALS_SECTOR)
+  if (metals.length === 0) return sectors
+
+  const weightage = round2(metals.reduce((sum, h) => sum + (h.weightage ?? 0), 0))
+  if (weightage <= 0) return sectors
+
+  // Only report a rupee value if every constituent carried one; a partial sum
+  // would understate the sector rather than simply be unknown.
+  const values = metals.map((h) => h.market_value_cr)
+  const market_value_cr = values.every((v) => v != null) ? round2(values.reduce((a, b) => a + b, 0)) : null
+
+  const row = { sector: PRECIOUS_METALS_SECTOR, weightage, market_value_cr, change_1m: null }
+  const rest = sectors.filter((s) => s.sector !== PRECIOUS_METALS_SECTOR)
+  const at = rest.findIndex((s) => (s.weightage ?? 0) < weightage)
+  if (at === -1) return [...rest, row]
+  return [...rest.slice(0, at), row, ...rest.slice(at)]
+}
+
 /**
  * Pure transform: finapi `data` object → normalized allocation payload.
  * Keeps only the portfolio/allocation pieces (the genuinely new data); returns,
@@ -41,8 +86,23 @@ export function normalizeHoldings(data) {
   const aa = p.assetAllocation ?? {}
   const mc = p.marketCapWeightage ?? {}
   const cn = p.concentration ?? {}
-  const holdings = Array.isArray(data?.holdings) ? data.holdings : []
-  const sectors  = Array.isArray(data?.sectors)  ? data.sectors  : []
+  const rawHoldings = Array.isArray(data?.holdings) ? data.holdings : []
+  const rawSectors  = Array.isArray(data?.sectors)  ? data.sectors  : []
+
+  const holdings = rawHoldings.map((h) => ({
+    name:            h.name ?? null,
+    sector:          sectorForHolding(h.name, h.sector),
+    weightage:       num(h.weightage),
+    market_value_cr: num(h.marketValue),
+    change_1m:       num(h.change1M),
+  }))
+
+  const sectors = withPreciousMetalsSector(holdings, rawSectors.map((s) => ({
+    sector:          s.sector ?? null,
+    weightage:       num(s.weightage),
+    market_value_cr: num(s.marketValue),
+    change_1m:       num(s.change1M),
+  })))
 
   return {
     asset_allocation: {
@@ -66,19 +126,8 @@ export function normalizeHoldings(data) {
       top10_stocks_weight:   num(cn.top10StocksWeight),
       average_market_cap_cr: num(cn.averageMarketCap),
     },
-    holdings: holdings.map((h) => ({
-      name:            h.name ?? null,
-      sector:          h.sector ?? null,
-      weightage:       num(h.weightage),
-      market_value_cr: num(h.marketValue),
-      change_1m:       num(h.change1M),
-    })),
-    sectors: sectors.map((s) => ({
-      sector:          s.sector ?? null,
-      weightage:       num(s.weightage),
-      market_value_cr: num(s.marketValue),
-      change_1m:       num(s.change1M),
-    })),
+    holdings,
+    sectors,
   }
 }
 

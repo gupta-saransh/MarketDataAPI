@@ -255,11 +255,13 @@ export async function getSip(code, { amount, from, to, day } = {}) {
 
 const HOLDINGS_TTL_MS = Number(process.env.HOLDINGS_TTL_HOURS ?? 24) * 3600 * 1000
 
-const HOLDINGS_GET = `SELECT fetched_at, payload FROM fund_holdings WHERE scheme_code = ?`
+const HOLDINGS_GET = `SELECT fetched_at, holdings_date, payload FROM fund_holdings WHERE scheme_code = ?`
 const HOLDINGS_UPSERT = `
-  INSERT INTO fund_holdings (scheme_code, fetched_at, payload)
-  VALUES (?, ?, ?)
-  ON CONFLICT (scheme_code) DO UPDATE SET fetched_at = excluded.fetched_at, payload = excluded.payload
+  INSERT INTO fund_holdings (scheme_code, fetched_at, holdings_date, payload)
+  VALUES (?, ?, ?, ?)
+  ON CONFLICT (scheme_code) DO UPDATE SET fetched_at    = excluded.fetched_at,
+                                          holdings_date = excluded.holdings_date,
+                                          payload       = excluded.payload
 `
 
 // Negative-cache marker: finapi has no portfolio for this scheme. Stored so we
@@ -272,27 +274,38 @@ const NULL_ALLOCATION = {
 }
 
 // payload is TEXT in SQLite and (currently) TEXT in Postgres, but tolerate a
-// pre-parsed object in case the column is ever switched to jsonb.
+// pre-parsed object in case the column is ever switched to jsonb. A corrupt row
+// must not 500 the route -- treat it as a cache miss and refetch.
 function parsePayload(raw) {
-  return typeof raw === 'string' ? JSON.parse(raw) : raw
+  if (raw == null) return null
+  if (typeof raw !== 'string') return raw
+  try { return JSON.parse(raw) } catch { return null }
 }
 
-function serveCached(identity, row) {
-  const payload = parsePayload(row.payload)
+// Curated rows carry a real portfolio date; fetched rows only know when we
+// pulled them, so fall back to the fetch timestamp.
+function serveCached(identity, row, payload) {
+  const as_of = row.holdings_date ?? row.fetched_at
   if (payload?.missing) {
-    return { ...identity, as_of: row.fetched_at, ...NULL_ALLOCATION,
+    return { ...identity, as_of, ...NULL_ALLOCATION,
              cached: true, note: 'No portfolio data available for this scheme.' }
   }
-  return { ...identity, as_of: row.fetched_at, ...payload, cached: true }
+  return { ...identity, as_of, ...payload, cached: true }
 }
 
 /**
  * Current portfolio allocation for a scheme. Scheme identity comes from our DB;
  * the allocation is proxied from finapi and cached in fund_holdings.
  *
- * Flow: fresh cache → serve it (no finapi call). Else fetch finapi:
+ * Flow: pinned or fresh cache → serve it (no finapi call). Else fetch finapi:
  *   success → upsert + serve; finapi 404 → negative-cache + serve null allocation;
  *   finapi 429/timeout → serve stale cache if any, else 503.
+ *
+ * Rows written by pipeline/seed-holdings.js carry `manual: true` and are pinned:
+ * they exist because upstream is wrong or blank for that fund (fund-of-funds
+ * report their one underlying scheme and nothing else), so letting the TTL
+ * expire and refetch would silently undo the curation. Only re-running the
+ * seeder replaces them.
  */
 export async function getHoldings(code) {
   const c = Number(code)
@@ -307,28 +320,31 @@ export async function getHoldings(code) {
     broad_category: scheme.broad_category,
   }
 
-  const cached = await sql.get(HOLDINGS_GET, [c])
-  const fresh  = cached && (Date.now() - Date.parse(cached.fetched_at) < HOLDINGS_TTL_MS)
-  if (fresh) return { ok: true, data: serveCached(identity, cached) }
+  const cached  = await sql.get(HOLDINGS_GET, [c])
+  const payload = cached ? parsePayload(cached.payload) : null
+  const usable  = payload != null
+  const fresh   = usable && (payload.manual === true ||
+                             Date.now() - Date.parse(cached.fetched_at) < HOLDINGS_TTL_MS)
+  if (fresh) return { ok: true, data: serveCached(identity, cached, payload) }
 
   const result = await fetchHoldings(c)
   const now = new Date().toISOString()
 
   if (result.ok) {
-    const payload = JSON.stringify(result.data)
-    try { await sql.run(HOLDINGS_UPSERT, [c, now, payload]) } catch { /* cache write is best-effort */ }
+    const json = JSON.stringify(result.data)
+    try { await sql.run(HOLDINGS_UPSERT, [c, now, null, json]) } catch { /* cache write is best-effort */ }
     return { ok: true, data: { ...identity, as_of: now, ...result.data, cached: false } }
   }
 
   // upstream says it has no portfolio for this scheme — negative-cache and return nulls.
   if (result.status === 404) {
-    try { await sql.run(HOLDINGS_UPSERT, [c, now, JSON.stringify(MISSING)]) } catch { /* best-effort */ }
+    try { await sql.run(HOLDINGS_UPSERT, [c, now, null, JSON.stringify(MISSING)]) } catch { /* best-effort */ }
     return { ok: true, data: { ...identity, as_of: now, ...NULL_ALLOCATION,
              cached: false, note: 'No portfolio data available for this scheme.' } }
   }
 
   // upstream errored (rate limit / timeout). Stale data beats no data.
-  if (cached) return { ok: true, data: { ...serveCached(identity, cached), stale: true } }
+  if (usable) return { ok: true, data: { ...serveCached(identity, cached, payload), stale: true } }
 
   return { ok: false, status: 503, error: 'Holdings are temporarily unavailable. Please try again shortly.' }
 }

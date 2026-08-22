@@ -608,6 +608,14 @@ function HoldingsCard({ code }: { code: string }) {
             </div>
           </div>
 
+          {/* Look-through funds need the caveat next to the numbers, not buried:
+              the weights belong to the underlying fund, not to this one. */}
+          {data.note && (
+            <p className="mt-5 rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2 text-xs leading-relaxed text-slate-400">
+              {data.note}
+            </p>
+          )}
+
           <p className="mt-5 text-xs text-slate-500">
             {data.as_of ? `Updated ${data.as_of.slice(0, 10)}` : 'Portfolio allocation'}
             {data.stale ? ' · showing the latest saved copy' : ''}

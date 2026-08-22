@@ -65,14 +65,19 @@ market-data-api/
 │   │   ├── client.js             ← Raw DatabaseSync handle (seed.js only)
 │   │   ├── schema.sql            ← SQLite schema + indexes
 │   │   └── schema.postgres.sql   ← Postgres schema + pg_trgm + indexes (run once in CockroachDB)
+│   ├── data/
+│   │   └── manual-holdings.js    ← Hand-curated look-through portfolios (FoF / offshore feeders)
 │   ├── lib/
 │   │   ├── finance.js            ← Pure financial math (CAGR, rolling returns, Sharpe, SIP/XIRR)
 │   │   ├── queries.js            ← Shared data-access layer (SQL + shaping); used by REST routes AND MCP
+│   │   ├── finapi.js             ← Holdings client + normalize + Gold & Silver reclassification
+│   │   ├── curated-holdings.js   ← Pure: manual-holdings record → normalized payload
 │   │   └── axiom.js              ← Fire-and-forget logEvent() helper (REST + MCP both use this)
 │   ├── pipeline/
 │   │   ├── seed.js               ← Seeds SQLite from mfapi.in (~14k schemes, resumable)
 │   │   ├── migrate-to-supabase.js← Legacy — one-time SQLite → Supabase copy (deprecated)
 │   │   ├── migrate-to-cockroach.js← One-time SQLite → CockroachDB copy (BATCH=5000, idempotent)
+│   │   ├── seed-holdings.js      ← Pins data/manual-holdings.js into fund_holdings (idempotent)
 │   │   └── prune.js              ← Removes nav_history rows older than NAV_YEARS
 │   ├── routes/
 │   │   ├── fund-houses.js        ← GET /fund-houses
@@ -223,6 +228,38 @@ first request for a fund fetches from finapi and upserts; requests within `HOLDI
 `api/test/holdings.test.js` (pure normalization + route/cache behavior with `fetch` stubbed).
 Edge cache for this route is **1h** (vs 60s for NAV routes) since portfolios move monthly and
 no sibling URL exposes the same fact.
+
+**Gold & silver reclassification.** finapi returns `sector: null` for bullion ETFs, so they
+land in the same unclassified bucket as cash and debt, which is wrong: bullion is its own
+asset class. `sectorForHolding()` rewrites the sector to **`Gold & Silver`** whenever the
+holding *name* matches `/\b(gold|silver)\b/i`, and `withPreciousMetalsSector()` sums them into
+a single extra row spliced into the (weight-descending) `sectors` array, which otherwise only
+covers equities. The `\b` anchors are load-bearing: they keep Goldman Sachs, Goldiam
+International and Golden Tobacco out. Verified across 1,917 cached holding rows: 14 distinct
+matches, all genuine bullion ETFs, zero false positives. Note that finapi's *asset allocation*
+already books bullion under `other` (not `cash`), so that split needed no change.
+
+### Curated Holdings — `api/data/manual-holdings.js` + `api/lib/curated-holdings.js`
+
+A fund-of-funds or offshore feeder discloses exactly one line to finapi ("JPM US Value I acc
+USD, 95.55%") plus its cash float — technically true, useless to an investor. `data/manual-holdings.js`
+is a hand-maintained table of look-through portfolios taken from the *underlying* fund's
+factsheet. `lib/curated-holdings.js buildPayload()` (pure, unit-tested) turns one record into the
+same normalized shape `normalizeHoldings()` emits, deriving `top3_sector_weight` /
+`top5_stocks_weight` / `top10_stocks_weight` from the rows and leaving `number_of_holdings` null
+(only the top slice is published, so the real count is unknown).
+
+`npm run holdings:manual` (`pipeline/seed-holdings.js`, `--dry-run` supported) upserts each
+record onto every scheme_code it lists, writing to whichever backend `DATABASE_URL` selects.
+Rows written this way carry **`manual: true`** and are **pinned**: `getHoldings()` serves them
+regardless of `HOLDINGS_TTL_HOURS` and never calls finapi for that scheme again, so an automatic
+refresh cannot silently undo the curation. Re-running the seeder is the only thing that replaces
+them. `holdings_date` carries the factsheet date and becomes the response's `as_of` (fetched
+rows leave it null and fall back to `fetched_at`).
+
+Weights are the underlying fund's own, **not** rescaled by the feeder's stake in it; the record's
+`note` says so and is surfaced in the API response. Currently loaded: **140273 / 140274**
+(Edelweiss US Value Equity Offshore Fund, Regular + Direct) ← JPM US Value I acc USD, 31 Jul 2026.
 
 ### MCP Server — `api/routes/mcp.js` (+ `api/lib/queries.js`)
 
@@ -395,7 +432,9 @@ fund_holdings      (scheme_code PK→schemes CASCADE, fetched_at TEXT, holdings_
 
 `fund_holdings.payload` is the normalized allocation JSON as TEXT in **both** backends (not
 jsonb) so the SQLite/Postgres adapters read/write it identically; `{"missing":true}` is the
-negative-cache marker. Lazily filled on demand by `GET /schemes/:code/holdings`, never seeded.
+negative-cache marker and `"manual":true` pins a hand-curated row against TTL refresh.
+`holdings_date` is set only for curated rows (the factsheet date, which becomes `as_of`).
+Lazily filled on demand by `GET /schemes/:code/holdings`, plus `npm run holdings:manual`.
 
 **Indexes (both backends):**
 - `idx_nav_history_scheme_date` on `nav_history(scheme_code, nav_date DESC)`
@@ -474,6 +513,9 @@ GET /schemes/:code/holdings                       ← proxied from finapi, cache
 → { scheme_code, scheme_name, fund_house, category, as_of,
     asset_allocation, market_cap, concentration, holdings: [...], sectors: [...],
     cached }                                       ← allocation null + note if finapi has none
+   holdings[].sector is 'Gold & Silver' for bullion ETFs (name match), which also
+   get their own row in sectors[]. `manual: true` + `note` mark a curated
+   look-through portfolio (FoF / offshore feeder); as_of is then the factsheet date.
    404 → { error: 'Scheme not found' }
    503 → { error: 'Holdings are temporarily unavailable...' }   ← finapi down + no cache
    NOTE: the finapi vendor is never named in any public response, the OpenAPI spec,
@@ -619,7 +661,7 @@ npm run fetch:logos       # from repo root
 ```
 
 ### npm scripts
-- **api**: `dev` (--watch), `start`, `seed`, `seed:force`, `migrate:cockroach`, `prune`, `test`
+- **api**: `dev` (--watch), `start`, `seed`, `seed:force`, `migrate:cockroach`, `prune`, `holdings:manual`, `test`
 - **frontend**: `dev`, `build` (`tsc -b && vite build`), `preview`
 - **root**: `vercel-build`, `fetch:logos`
 

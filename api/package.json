@@ -14,6 +14,7 @@
     "migrate": "node --experimental-sqlite pipeline/migrate-to-supabase.js",
     "migrate:cockroach": "node --experimental-sqlite pipeline/migrate-to-cockroach.js",
     "prune": "node --experimental-sqlite pipeline/prune.js",
+    "holdings:manual": "node --experimental-sqlite pipeline/seed-holdings.js",
     "test": "node --experimental-sqlite --test",
     "mcp:inspect": "npx -y @modelcontextprotocol/inspector"
   },

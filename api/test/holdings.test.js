@@ -16,7 +16,10 @@ import { tmpdir } from 'node:os'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-import { num, normalizeHoldings } from '../lib/finapi.js'
+import {
+  num, normalizeHoldings, sectorForHolding, withPreciousMetalsSector, PRECIOUS_METALS_SECTOR,
+} from '../lib/finapi.js'
+import { buildPayload } from '../lib/curated-holdings.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
@@ -73,6 +76,128 @@ test('normalizeHoldings is defensive about missing sections', () => {
   assert.equal(n.asset_allocation.equity, null)
   assert.equal(n.market_cap.large, null)
   assert.equal(n.concentration.number_of_holdings, null)
+})
+
+// ── 1b. gold / silver reclassification ────────────────────────
+
+test('sectorForHolding routes bullion out of the unclassified bucket', () => {
+  for (const name of ['SBI Gold ETF', 'Gold FoF', 'Nippon India ETF Gold BeES',
+                      'ICICI Prudential Silver ETF', 'Axis Silver ETF', 'gold etf fof']) {
+    assert.equal(sectorForHolding(name, null), PRECIOUS_METALS_SECTOR, name)
+  }
+  // Upstream sometimes files them under cash/debt; the name still wins.
+  assert.equal(sectorForHolding('SBI Gold ETF', 'Cash / Debt Instrument'), PRECIOUS_METALS_SECTOR)
+})
+
+test('sectorForHolding does not catch equities that merely start with those letters', () => {
+  assert.equal(sectorForHolding('Goldman Sachs Group Inc', 'Financial Services'), 'Financial Services')
+  assert.equal(sectorForHolding('Goldiam International Ltd', 'Consumer Cyclical'), 'Consumer Cyclical')
+  assert.equal(sectorForHolding('Golden Tobacco Ltd', 'Consumer Defensive'), 'Consumer Defensive')
+  assert.equal(sectorForHolding('HDFC Bank Ltd', 'Financial Services'), 'Financial Services')
+  assert.equal(sectorForHolding('Some Unlisted Co', null), null)
+  assert.equal(sectorForHolding(null, null), null)
+})
+
+test('withPreciousMetalsSector sums bullion into one weight-sorted row', () => {
+  const holdings = [
+    { name: 'Axis Gold ETF',   sector: PRECIOUS_METALS_SECTOR, weightage: 8.6,  market_value_cr: 100 },
+    { name: 'Axis Silver ETF', sector: PRECIOUS_METALS_SECTOR, weightage: 2.44, market_value_cr: 30 },
+    { name: 'HDFC Bank',       sector: 'Financial Services',   weightage: 5,    market_value_cr: 60 },
+  ]
+  const sectors = [
+    { sector: 'Financial Services', weightage: 23.02, market_value_cr: 300, change_1m: 1 },
+    { sector: 'Technology',         weightage: 6.11,  market_value_cr: 80,  change_1m: 0 },
+    { sector: 'Utilities',          weightage: 1.97,  market_value_cr: 20,  change_1m: 0 },
+  ]
+
+  const out = withPreciousMetalsSector(holdings, sectors)
+  assert.deepEqual(out.map((s) => s.sector),
+    ['Financial Services', PRECIOUS_METALS_SECTOR, 'Technology', 'Utilities'])
+  // 8.6 + 2.44 must not surface as 11.040000000000001
+  assert.equal(out[1].weightage, 11.04)
+  assert.equal(out[1].market_value_cr, 130)
+})
+
+test('withPreciousMetalsSector leaves a bullion-free portfolio untouched', () => {
+  const sectors = [{ sector: 'Financial Services', weightage: 23.02, market_value_cr: 300, change_1m: 0 }]
+  assert.equal(withPreciousMetalsSector([{ name: 'HDFC Bank', sector: 'Financial Services', weightage: 5 }], sectors),
+    sectors)
+})
+
+test('normalizeHoldings reclassifies bullion end to end', () => {
+  const n = normalizeHoldings({
+    holdings: [
+      { name: 'HDFC Bank Ltd',      sector: 'Financial Services', weightage: '9.18', marketValue: '100' },
+      { name: 'Aditya BSL Gold ETF',   sector: null,              weightage: '8.60', marketValue: '90' },
+      { name: 'Aditya BSL Silver ETF', sector: null,              weightage: '2.44', marketValue: '25' },
+    ],
+    sectors: [{ sector: 'Financial Services', weightage: '23.02', marketValue: '300' }],
+  })
+
+  assert.equal(n.holdings[1].sector, PRECIOUS_METALS_SECTOR)
+  assert.equal(n.holdings[2].sector, PRECIOUS_METALS_SECTOR)
+  assert.equal(n.holdings[0].sector, 'Financial Services')
+  const gold = n.sectors.find((s) => s.sector === PRECIOUS_METALS_SECTOR)
+  assert.ok(gold, 'bullion must appear in the sector mix, not vanish')
+  assert.equal(gold.weightage, 11.04)
+  assert.equal(gold.market_value_cr, 115)
+})
+
+// ── 1c. curated (manual) records ──────────────────────────────
+
+const CURATED = {
+  schemes: [140273, 140274],
+  as_of: '2026-07-31',
+  note: 'Look-through portfolio.',
+  asset_allocation: { equity: 97.4, debt: 0, cash: 2.7, other: 0 },
+  holdings: [
+    ['Amazon.com', 'Consumer Discretionary', 6.4], ['Microsoft', 'Information Technology', 5.3],
+    ['Apple', 'Information Technology', 3.9],      ['Wells Fargo', 'Financials', 2.3],
+    ['Bank of America', 'Financials', 2.3],        ['Johnson & Johnson', 'Health Care', 2.1],
+    ['Chevron', 'Energy', 2.0],                    ['Morgan Stanley', 'Financials', 2.0],
+    ['ConocoPhillips', 'Energy', 1.9],             ['Citigroup', 'Financials', 1.8],
+  ],
+  sectors: [
+    ['Financials', 21.0], ['Information Technology', 17.1], ['Health Care', 13.5],
+    ['Consumer Discretionary', 12.6], ['Industrials', 10.8], ['Cash', 2.7],
+  ],
+}
+
+test('buildPayload emits the normalized shape and derives concentration', () => {
+  const p = buildPayload(CURATED)
+  assert.equal(p.manual, true)
+  assert.equal(p.asset_allocation.equity, 97.4)
+  assert.equal(p.market_cap.large, null)            // unknown, not zero
+  assert.equal(p.holdings[0].name, 'Amazon.com')
+  assert.equal(p.holdings[0].sector, 'Consumer Discretionary')
+  assert.equal(p.concentration.top5_stocks_weight, 20.2)   // 6.4+5.3+3.9+2.3+2.3
+  assert.equal(p.concentration.top10_stocks_weight, 30)    // whole published list
+  assert.equal(p.concentration.top3_sector_weight, 51.6)   // 21.0+17.1+13.5
+  // Only the top slice is published, so the real count is unknown.
+  assert.equal(p.concentration.number_of_holdings, null)
+})
+
+test('buildPayload reports null concentration when too few rows are published', () => {
+  const p = buildPayload({ holdings: [['Amazon.com', 'Consumer Discretionary', 6.4]], sectors: [] })
+  assert.equal(p.concentration.top5_stocks_weight, null)
+  assert.equal(p.concentration.top10_stocks_weight, null)
+  assert.equal(p.concentration.top3_sector_weight, null)
+})
+
+test('the shipped manual-holdings file builds cleanly', async () => {
+  const records = (await import('../data/manual-holdings.js')).default
+  assert.ok(records.length > 0)
+  for (const rec of records) {
+    assert.ok(Array.isArray(rec.schemes) && rec.schemes.length, 'record needs scheme codes')
+    assert.match(rec.as_of, /^\d{4}-\d{2}-\d{2}$/, 'as_of must be YYYY-MM-DD')
+    const p = buildPayload(rec)
+    assert.equal(p.manual, true)
+    for (const h of p.holdings) {
+      assert.ok(h.name, 'holding needs a name')
+      assert.ok(Number.isFinite(h.weightage), `bad weight on ${h.name}`)
+    }
+    for (const s of p.sectors) assert.ok(Number.isFinite(s.weightage), `bad weight on ${s.sector}`)
+  }
 })
 
 // ── 2. route + cache behavior ─────────────────────────────────
@@ -171,6 +296,45 @@ test('finapi 404 negative-caches and returns null allocation', async () => {
   // negative cache: a repeat does not hit finapi again
   const r2 = await app.inject({ method: 'GET', url: '/schemes/202020/holdings' })
   assert.equal(r2.json().holdings, null)
+  assert.equal(fetchCalls, 1)
+})
+
+test('a curated row is pinned: served past the TTL, upstream never called', async () => {
+  const db = new DatabaseSync(DB_PATH)
+  db.exec(`INSERT INTO schemes (scheme_code, scheme_name, fund_house_id, scheme_category_id)
+           VALUES (140274, 'Edelweiss US Value Equity Offshore Fund - Direct Plan - Growth Option', 9, 43)`)
+  // fetched_at a year ago: far outside HOLDINGS_TTL_HOURS, so a non-pinned row
+  // would refetch here.
+  db.prepare(`INSERT INTO fund_holdings (scheme_code, fetched_at, holdings_date, payload)
+              VALUES (?, ?, ?, ?)`)
+    .run(140274, '2025-08-01T00:00:00.000Z', '2026-07-31', JSON.stringify(buildPayload(CURATED)))
+  db.close()
+
+  stubFetch(async () => jsonResponse({ status: 'success', data: SAMPLE }))
+  const r = await app.inject({ method: 'GET', url: '/schemes/140274/holdings' })
+  assert.equal(r.statusCode, 200)
+  const b = r.json()
+  assert.equal(fetchCalls, 0, 'a pinned row must never hit upstream')
+  assert.equal(b.holdings[0].name, 'Amazon.com')
+  assert.equal(b.cached, true)
+  assert.equal(b.manual, true)
+  assert.match(b.note, /Look-through/)
+  // as_of is the portfolio date, not the row's write timestamp
+  assert.equal(b.as_of, '2026-07-31')
+})
+
+test('a corrupt cached payload refetches instead of throwing', async () => {
+  const db = new DatabaseSync(DB_PATH)
+  db.exec(`INSERT INTO schemes (scheme_code, scheme_name, fund_house_id, scheme_category_id)
+           VALUES (404040, 'Corrupt Cache Fund - Growth', 9, 43)`)
+  db.prepare(`INSERT INTO fund_holdings (scheme_code, fetched_at, payload) VALUES (?, ?, ?)`)
+    .run(404040, new Date().toISOString(), '{not json')
+  db.close()
+
+  stubFetch(async () => jsonResponse({ status: 'success', data: SAMPLE }))
+  const r = await app.inject({ method: 'GET', url: '/schemes/404040/holdings' })
+  assert.equal(r.statusCode, 200)
+  assert.equal(r.json().holdings[0].name, 'ICICI Bank Ltd')
   assert.equal(fetchCalls, 1)
 })
 

@@ -152,6 +152,10 @@ export interface HoldingsResp {
   sectors: SectorRow[] | null
   cached: boolean
   stale?: boolean
+  // Hand-curated look-through portfolio: a fund-of-funds or offshore feeder
+  // discloses only its single underlying scheme, so the underlying fund's own
+  // holdings are published instead. `note` explains what the weights refer to.
+  manual?: boolean
   note?: string
 }
 

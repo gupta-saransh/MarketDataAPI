@@ -438,7 +438,14 @@ export const openapi = {
           + 'Portfolios are disclosed roughly monthly, so this data is fetched on demand and cached '
           + 'per scheme. When no portfolio is available for a scheme, the allocation fields are null '
           + 'and a note explains why. The "cached" flag indicates a cache hit, and "stale": true '
-          + 'means the latest saved copy was served because a refresh could not be completed.',
+          + 'means the latest saved copy was served because a refresh could not be completed.\n\n'
+          + 'Gold and silver ETFs / fund-of-funds held inside a scheme are reported under the '
+          + '"Gold & Silver" sector rather than left unclassified alongside cash and debt, and they '
+          + 'appear as their own row in the sector breakdown.\n\n'
+          + '"manual": true marks a hand-curated portfolio. A fund-of-funds or offshore feeder '
+          + 'discloses only its single underlying scheme, so for those funds the look-through '
+          + 'portfolio of the underlying fund is published instead, with "as_of" set to the '
+          + 'underlying factsheet date and "note" describing what the weights refer to.',
         parameters: [
           { name: 'code', in: 'path', required: true, description: 'Scheme code', schema: { type: 'integer' }, example: 101762 },
         ],
