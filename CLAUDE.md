@@ -370,6 +370,11 @@ Groww-style mutual fund card. Features:
 - **Tooltips**: each stat tile has an `ⓘ` icon with a hover/focus tooltip explaining the metric
   in plain language (e.g. "How bumpy the ride is...").
 - **Default scheme**: 101762 (HDFC Flexi Cap Fund) so the page always loads with real data.
+- **Identifiers in the header**: scheme code + growth ISIN, click-to-copy, plus a "Use via API" jump link.
+- **API access card** (`#api-access`, `ApiAccessCard`): metadata labelled with its JSON field name
+  (scheme_code, both ISINs, fund house, category, NAV history range), a copyable absolute URL per
+  endpoint for this scheme, quick-start snippets (cURL / JS / Python / Sheets `=MF_NAV`), and the
+  MCP URL. `last_synced_at` is deliberately not shown: only the seed writes it, so it is stale in prod.
 
 All domain types (`NavPoint`, `SchemeDetail`, `Period`, `ReturnsResp`, `Risk`, `SearchRow`)
 live in `frontend/src/types.ts`.

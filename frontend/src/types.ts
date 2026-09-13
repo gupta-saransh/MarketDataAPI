@@ -64,6 +64,7 @@ export interface SchemeDetail {
   scheme_code: string | number
   scheme_name: string
   isin_growth: string | null
+  isin_div_reinvestment: string | null
   fund_house: string | null
   category: string | null
   broad_category: string | null

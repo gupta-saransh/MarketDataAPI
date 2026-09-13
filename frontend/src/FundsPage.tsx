@@ -292,6 +292,17 @@ export default function FundsPage() {
                         <span key={c} className="rounded-full border border-slate-700 px-2.5 py-0.5 text-xs text-slate-300">{c}</span>
                       ))}
                     </div>
+                    {/* Identifiers up front: they're what you pass to the API */}
+                    <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-slate-500">
+                      <CopyValue label="Scheme code" value={String(detail.scheme_code)} />
+                      {detail.isin_growth && <CopyValue label="ISIN" value={detail.isin_growth} />}
+                      <button
+                        onClick={() => document.getElementById('api-access')?.scrollIntoView({ behavior: 'smooth' })}
+                        className="text-slate-400 underline-offset-2 transition-colors hover:text-slate-200 hover:underline"
+                      >
+                        Use via API ↓
+                      </button>
+                    </div>
                   </div>
                   <ShareButton code={code} />
                 </div>
@@ -409,6 +420,9 @@ export default function FundsPage() {
         {/* SIP calculator */}
         {!error && !loading && detail && <SipCard code={code} schemeName={detail.scheme_name} />}
 
+        {/* Developer handoff: identifiers + ready-to-run requests for this scheme */}
+        {!error && !loading && detail && <ApiAccessCard detail={detail} series={series} />}
+
         <p className="mt-6 text-xs leading-relaxed text-slate-400">
           Data from AMFI via the Market Data API. 1Y and 3Y returns are fixed trailing periods
           (annualised above 1Y); volatility, max drawdown and Sharpe are computed over the
@@ -488,16 +502,38 @@ function SearchBox({ placeholder, onPick, small }: {
   )
 }
 
-// Copy the shareable #funds/<code> link.
-function ShareButton({ code }: { code: string }) {
+// Clipboard write with a brief "copied" flag for button feedback.
+function useCopy(): [boolean, (text: string) => void] {
   const [copied, setCopied] = useState(false)
-  const copy = () => {
-    const url = `${window.location.origin}${window.location.pathname}#funds/${code}`
-    navigator.clipboard?.writeText(url).then(() => {
+  const copy = (text: string) => {
+    navigator.clipboard?.writeText(text).then(() => {
       setCopied(true)
       setTimeout(() => setCopied(false), 1600)
     }).catch(() => {})
   }
+  return [copied, copy]
+}
+
+// Inline "Label 12345" identifier; click to copy the value.
+function CopyValue({ label, value }: { label: string; value: string }) {
+  const [copied, copy] = useCopy()
+  return (
+    <button
+      onClick={() => copy(value)}
+      title={`Copy ${label.toLowerCase()}`}
+      className="group inline-flex items-center gap-1.5 transition-colors hover:text-slate-300"
+    >
+      {label}
+      <span className="rounded bg-slate-800 px-1.5 py-0.5 font-mono text-slate-200 group-hover:bg-slate-700">{value}</span>
+      <span className="w-12 text-left text-[10px] text-slate-500">{copied ? 'copied ✓' : 'copy'}</span>
+    </button>
+  )
+}
+
+// Copy the shareable #funds/<code> link.
+function ShareButton({ code }: { code: string }) {
+  const [copied, copyText] = useCopy()
+  const copy = () => copyText(`${window.location.origin}${window.location.pathname}#funds/${code}`)
   return (
     <button
       onClick={copy}
@@ -797,6 +833,181 @@ function SipCard({ code, schemeName }: { code: string; schemeName: string }) {
         </div>
       )}
     </div>
+  )
+}
+
+// Everything needed to pull this fund's data yourself: identifiers (labelled with
+// their JSON field names), a copyable URL per endpoint, and quick-start snippets.
+type SnippetLang = 'cURL' | 'JavaScript' | 'Python' | 'Sheets'
+const SNIPPET_LANGS: SnippetLang[] = ['cURL', 'JavaScript', 'Python', 'Sheets']
+
+function shiftYears(date: string, years: number): string {
+  const d = new Date(date + 'T00:00:00Z')
+  d.setUTCFullYear(d.getUTCFullYear() + years)
+  return d.toISOString().slice(0, 10)
+}
+
+function ApiAccessCard({ detail, series }: { detail: SchemeDetail; series: NavPoint[] }) {
+  const [lang, setLang] = useState<SnippetLang>('cURL')
+  const code = String(detail.scheme_code)
+  // Absolute base so copied URLs work outside this page (API_BASE is usually relative).
+  const base = new URL(API_BASE, window.location.href).href.replace(/\/$/, '')
+  const first = series[0]?.nav_date
+  const last = series[series.length - 1]?.nav_date
+
+  const meta: { label: string; field?: string; value: string | null; copy?: boolean }[] = [
+    { label: 'Scheme code', field: 'scheme_code', value: code, copy: true },
+    { label: 'ISIN (growth)', field: 'isin_growth', value: detail.isin_growth, copy: true },
+    { label: 'ISIN (div. reinvestment)', field: 'isin_div_reinvestment', value: detail.isin_div_reinvestment, copy: true },
+    { label: 'Fund house', field: 'fund_house', value: detail.fund_house },
+    { label: 'Category', field: 'category', value: detail.category },
+    { label: 'Scheme type', field: 'broad_category', value: detail.broad_category },
+    {
+      label: 'NAV history available',
+      value: first && last ? `${first} to ${last} · ${series.length.toLocaleString('en-IN')} NAVs` : null,
+    },
+  ]
+
+  const endpoints: { label: string; path: string }[] = [
+    { label: 'Scheme details', path: `/schemes/${code}` },
+    { label: 'Latest NAV', path: `/schemes/${code}/nav/latest` },
+    { label: 'NAV history (1Y)', path: last ? `/schemes/${code}/nav?startDate=${shiftYears(last, -1)}&endDate=${last}` : `/schemes/${code}/nav` },
+    { label: 'Trailing returns', path: `/schemes/${code}/returns` },
+    { label: 'Risk metrics', path: `/schemes/${code}/risk?rf=6` },
+    { label: 'Rolling returns', path: `/schemes/${code}/rolling?window=3Y&beat=12` },
+    { label: 'SIP simulation', path: last ? `/schemes/${code}/sip?amount=5000&from=${shiftYears(last, -3)}` : `/schemes/${code}/sip?amount=5000` },
+    { label: 'Portfolio holdings', path: `/schemes/${code}/holdings` },
+    ...(detail.isin_growth ? [{ label: 'Lookup by ISIN', path: `/schemes/isin/${detail.isin_growth}` }] : []),
+  ]
+
+  const latestUrl = `${base}/schemes/${code}/nav/latest`
+  const snippets: Record<SnippetLang, string> = {
+    cURL: `curl ${latestUrl}`,
+    JavaScript: `const res = await fetch('${latestUrl}')\nconst { nav, nav_date } = await res.json()`,
+    Python: `import requests\n\nr = requests.get('${latestUrl}').json()\nprint(r['nav'], r['nav_date'])`,
+    Sheets: `=MF_NAV(${code})`,
+  }
+
+  return (
+    <div id="api-access" className="mt-6 scroll-mt-6 rounded-2xl border border-slate-800 bg-slate-900/50 p-6">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h2 className="text-sm font-semibold text-white">Use this fund in the API</h2>
+          <p className="mt-0.5 text-xs text-slate-400">
+            Identifiers and ready-to-run requests for this scheme. Free and public, no API key needed.
+          </p>
+        </div>
+        <a
+          href="#docs"
+          className="shrink-0 rounded-lg border border-slate-700 px-3 py-1.5 text-xs font-medium text-slate-400 transition-colors hover:border-slate-500 hover:text-slate-200"
+        >
+          API Reference
+        </a>
+      </div>
+
+      {/* Metadata, labelled with the JSON field each value comes back as */}
+      <dl className="mt-5 grid gap-x-6 gap-y-4 sm:grid-cols-2">
+        {meta.map((m) => (
+          <div key={m.label} className="min-w-0">
+            <dt className="flex flex-wrap items-baseline gap-x-2 text-xs text-slate-500">
+              {m.label}
+              {m.field && <code className="font-mono text-[10px] text-slate-500/80">{m.field}</code>}
+            </dt>
+            <dd className="mt-1 flex items-center gap-2 text-sm text-slate-100">
+              <span className={`truncate ${m.copy && m.value ? 'font-mono' : ''}`}>{m.value ?? 'n/a'}</span>
+              {m.copy && m.value && <CopyButton text={m.value} />}
+            </dd>
+          </div>
+        ))}
+      </dl>
+
+      {/* Endpoints */}
+      <div className="mt-6 border-t border-slate-800 pt-5">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h3 className="text-xs font-semibold uppercase tracking-widest text-slate-500">Endpoints</h3>
+          <div className="flex min-w-0 items-center gap-2 text-xs text-slate-500">
+            Base URL
+            <code className="truncate font-mono text-slate-300">{base}</code>
+            <CopyButton text={base} />
+          </div>
+        </div>
+        <ul className="mt-3 divide-y divide-slate-800/70">
+          {endpoints.map((e) => {
+            const url = `${base}${e.path}`
+            return (
+              <li key={e.label} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2">
+                <span className="w-full text-xs text-slate-400 sm:w-36 sm:shrink-0">{e.label}</span>
+                <span className="shrink-0 rounded bg-emerald-950 px-1.5 py-0.5 font-mono text-[10px] font-semibold text-emerald-300">GET</span>
+                <code className="min-w-0 flex-1 truncate font-mono text-xs text-slate-200" title={url}>{e.path}</code>
+                <CopyButton text={url} />
+                <a
+                  href={url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="shrink-0 text-[11px] text-slate-400 transition-colors hover:text-slate-200"
+                >
+                  Open ↗
+                </a>
+              </li>
+            )
+          })}
+        </ul>
+      </div>
+
+      {/* Quick start */}
+      <div className="mt-6 border-t border-slate-800 pt-5">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h3 className="text-xs font-semibold uppercase tracking-widest text-slate-500">Quick start</h3>
+          <div className="flex gap-1">
+            {SNIPPET_LANGS.map((l) => (
+              <button
+                key={l}
+                onClick={() => setLang(l)}
+                className={`rounded-full px-2.5 py-1 text-xs font-medium transition-colors ${
+                  lang === l ? 'bg-white text-slate-900' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
+                }`}
+              >
+                {l}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="relative mt-3">
+          <pre className="overflow-x-auto rounded-lg border border-slate-800 bg-slate-950 p-4 pr-20 font-mono text-xs leading-relaxed text-slate-200">
+            {snippets[lang]}
+          </pre>
+          <div className="absolute right-2 top-2">
+            <CopyButton text={snippets[lang]} />
+          </div>
+        </div>
+        {lang === 'Sheets' && (
+          <p className="mt-2 text-xs leading-relaxed text-slate-500">
+            Paste{' '}
+            <a href="/excel-addin/google-sheets.js" target="_blank" rel="noreferrer" className="text-slate-300 underline underline-offset-2 hover:text-white">
+              google-sheets.js
+            </a>{' '}
+            into Extensions → Apps Script first. Also available: MF_NAV_ON, MF_DAILY_CHANGE, MF_RETURN.
+          </p>
+        )}
+        <p className="mt-4 flex flex-wrap items-center gap-2 text-xs text-slate-500">
+          AI agents: connect any MCP client to
+          <code className="font-mono text-slate-300">{base}/mcp</code>
+          <CopyButton text={`${base}/mcp`} />
+        </p>
+      </div>
+    </div>
+  )
+}
+
+function CopyButton({ text }: { text: string }) {
+  const [copied, copy] = useCopy()
+  return (
+    <button
+      onClick={() => copy(text)}
+      className="shrink-0 rounded-md border border-slate-700 px-2 py-0.5 text-[11px] text-slate-400 transition-colors hover:border-slate-500 hover:text-slate-200"
+    >
+      {copied ? 'Copied ✓' : 'Copy'}
+    </button>
   )
 }
 
